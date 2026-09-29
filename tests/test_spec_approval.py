@@ -735,6 +735,61 @@ class TestAP17OptOut(Base):
         self.assertIsNotNone(env.launch())
 
 
+    def test_AP_17_more_opt_out_phrases_in_feature(self):
+        for text in ("без аппрува", "без апруфа", "NO APPROVAL!"):
+            with self.subTest(prompt=text):
+                env = self.env()
+                self.assertIn("specguard: mode feature, approval off", msg(env.say(text)))
+                self.assertIsNone(env.launch())
+
+    def test_AP_17_visual_plus_feature_works_as_feature(self):
+        env = self.env()
+        env.call("UserPromptExpansion", helpers.user_prompt_expansion(S1, "specguard:mode", "visual+feature"))
+        self.assertIn("specguard: mode visual+feature, approval off", msg(env.say("no approval")))
+        self.assertIsNone(env.launch())
+
+    def test_AP_17_modes_without_feature_or_hard_change_nothing(self):
+        rows = (
+            ("simple", SIMPLE, "no approval"),
+            ("simple", SIMPLE, "Без апруву."),
+            ("visual", {"version": 1, "modes": {"default": "visual"}}, "без апрува"),
+        )
+        for label, config, text in rows:
+            with self.subTest(mode=label, prompt=text):
+                env = self.env(config)
+                env.say("hello")
+                before = self.state_snapshot(env)
+                out = env.say(text)
+                self.assertIn("specguard: approval applies only in feature or hard mode", msg(out))
+                self.assertNotIn("mode " + label, msg(out))
+                self.assertNotIn("approval off", msg(out))
+                self.assertEqual(self.state_snapshot(env), before)
+
+    def test_AP_17_simple_mode_opt_out_leaves_no_trace_for_later_feature(self):
+        env = self.env(SIMPLE)
+        env.say("no approval")
+        out = env.say("go feature spec")
+        self.assertIn("specguard: mode feature, approval on", msg(out))
+        self.assertIsNotNone(env.launch())
+
+    def test_AP_17_simple_mode_status_line_stays_simple(self):
+        env = self.env(SIMPLE)
+        out = env.say("no approval")
+        ctx = out.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertIn("Active specguard mode is simple.", ctx)
+
+    def state_snapshot(self, env):
+        snap = {}
+        for root, _, names in os.walk(env.state_home):
+            for name in names:
+                if name == "log.jsonl":
+                    continue
+                path = os.path.join(root, name)
+                with open(path, "rb") as f:
+                    snap[os.path.relpath(path, env.state_home)] = f.read()
+        return snap
+
+
 class TestAP18RunningRoles(Base):
     def send(self, env, to="ag-1", text="Please continue with the tests"):
         return env.tool("SendMessage", {"to": to, "message": text})

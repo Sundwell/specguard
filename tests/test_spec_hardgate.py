@@ -236,6 +236,88 @@ class TestTiming(HardGateBase):
         self.assertRule8Passed(self.launch())
 
 
+class TestSequence(HardGateBase):
+    def _state_dir(self):
+        key = os.path.abspath(self.project_dir).replace("/", "-")
+        path = os.path.join(self.state_home, "specguard", key)
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _read(self, name):
+        with open(os.path.join(self._state_dir(), name), encoding="utf-8") as f:
+            return json.load(f)
+
+    def _plant(self, launch, report):
+        self.project()
+        self.edit(SPEC, "v2\n")
+        launch_entry = dict(launch, sha256="0" * 64)
+        report_path = os.path.join(os.path.abspath(self.project_dir), REPORT_DIR, "domain-order.md")
+        report_entry = dict(report, agent_id="adv-1")
+        with open(os.path.join(self._state_dir(), "launches.json"), "w", encoding="utf-8") as f:
+            json.dump({SPEC: launch_entry}, f)
+        with open(os.path.join(self._state_dir(), "advocate-reports.json"), "w", encoding="utf-8") as f:
+            json.dump({report_path: [report_entry]}, f)
+
+    def test_HG_12_report_recorded_straight_after_launch_counts(self):
+        self.project()
+        self.assertIsNone(self.launch())
+        self.edit(SPEC, "v2\n")
+        self.report("domain-order.md")
+        self.assertRule8Passed(self.launch())
+
+    def test_HG_12_greater_seq_wins_over_older_clock(self):
+        self._plant({"at": 2000.0, "seq": 5}, {"at": 1000.0, "seq": 6})
+        self.assertRule8Passed(self.launch())
+
+    def test_HG_12_smaller_seq_is_stale_despite_later_clock(self):
+        self._plant({"at": 1000.0, "seq": 6}, {"at": 2000.0, "seq": 5})
+        self.assertAdvocateRefusal(self.launch())
+
+    def test_HG_12_equal_seq_is_stale(self):
+        self._plant({"at": 1000.0, "seq": 5}, {"at": 1000.0, "seq": 5})
+        self.assertAdvocateRefusal(self.launch())
+
+    def test_HG_12_old_format_later_report_clock_counts(self):
+        self._plant({"at": 1000.0}, {"at": 2000.0})
+        self.assertRule8Passed(self.launch())
+
+    def test_HG_12_old_format_earlier_report_clock_is_stale(self):
+        self._plant({"at": 2000.0}, {"at": 1000.0})
+        self.assertAdvocateRefusal(self.launch())
+
+    def test_HG_12_mixed_launch_seq_report_without_falls_back_to_clock_and_counts(self):
+        self._plant({"at": 1000.0, "seq": 9}, {"at": 2000.0})
+        self.assertRule8Passed(self.launch())
+
+    def test_HG_12_mixed_report_seq_launch_without_falls_back_to_clock_and_is_stale(self):
+        self._plant({"at": 2000.0}, {"at": 1000.0, "seq": 9})
+        self.assertAdvocateRefusal(self.launch())
+
+    def test_HG_12_launch_seq_values_are_distinct_and_grow(self):
+        a, b = "docs/specs/a.md", "docs/specs/b.md"
+        self.project(files={a: "a1\n", b: "b1\n"})
+        self.assertIsNone(self.launch(specs=(a,)))
+        self.assertIsNone(self.launch(specs=(b,)))
+        launches = self._read("launches.json")
+        seq_a, seq_b = launches[a]["seq"], launches[b]["seq"]
+        self.assertIsInstance(seq_a, int)
+        self.assertIsInstance(seq_b, int)
+        self.assertGreater(seq_b, seq_a)
+
+    def test_HG_12_report_seq_is_greater_than_earlier_launch_seq(self):
+        self.project()
+        self.assertIsNone(self.launch())
+        self.edit(SPEC, "v2\n")
+        self.report("domain-order.md")
+        launch_seq = self._read("launches.json")[SPEC]["seq"]
+        reports = self._read("advocate-reports.json")
+        self.assertEqual(len(reports), 1)
+        entries = list(reports.values())[0]
+        self.assertEqual(len(entries), 1)
+        self.assertIsInstance(entries[0]["seq"], int)
+        self.assertGreater(entries[0]["seq"], launch_seq)
+
+
 class TestLastLaunchContent(HardGateBase):
     def _launch_v1_then_commit_v2(self):
         self.project()

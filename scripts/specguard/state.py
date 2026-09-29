@@ -117,10 +117,19 @@ class State:
                 return entry.get("session_id")
         return session_id
 
+    def next_seq(self):
+        def update(counter):
+            counter["n"] = int(counter.get("n", 0)) + 1
+            return counter
+
+        return self.update_json("seq.json", update)["n"]
+
     def record_advocate_report(self, path, agent_id):
+        seq = self.next_seq()
+
         def update(reports):
             reports.setdefault(path, [])
-            reports[path].append({"agent_id": agent_id, "at": time.time()})
+            reports[path].append({"agent_id": agent_id, "at": time.time(), "seq": seq})
             return reports
 
         return self.update_json("advocate-reports.json", update)

@@ -364,7 +364,7 @@ def rule_spec_gate(ctx):
 
     def update_launches(launches):
         for spec in specs:
-            launches[spec] = {"at": time.time(), "sha256": statuses[spec][1]}
+            launches[spec] = {"at": time.time(), "sha256": statuses[spec][1], "seq": ctx.state.next_seq()}
         return launches
 
     ctx.state.update_json("launches.json", update_launches)
@@ -555,6 +555,8 @@ def _try_bare_optout(ctx, normalized):
     for phrase in phrases:
         if normalized == phrase or normalized.startswith(phrase + " ") or normalized.startswith(phrase + ","):
             modes_set = ctx.modes()
+            if not ({"feature", "hard"} & set(modes_set)):
+                return core.message("specguard: approval applies only in feature or hard mode")
             if "hard" in modes_set:
                 return core.message(
                     "specguard: no-approval refused, hard mode always requires approval"

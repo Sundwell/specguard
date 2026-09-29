@@ -14,7 +14,8 @@ CONFIG = {"version": 1, "modes": {"default": "simple", "approval_default": True}
 YES = "✓ Switch"
 STAY = "Stay"
 REFUSAL = "specguard: no-approval refused, hard mode always requires approval"
-SPEC_MARKER = "specguard-approve docs/specs/x.md@aaaaaaa"
+FEATURE_ON = "specguard: mode feature, approval on (confirmed by you)"
+SPEC_MARKER ="specguard-approve docs/specs/x.md@aaaaaaa"
 
 
 def question_text(marker_set="feature", suffix=""):
@@ -173,17 +174,21 @@ class TestQuestionStructure(Base):
 class TestAnswerSwitch(Base):
     def test_MC_4_switch_and_status_line(self):
         cases = [
-            ("feature", "feature", "Active specguard mode is feature, approval on."),
-            ("hard", "hard", "Active specguard mode is hard, approval on."),
-            ("visual+feature", "visual+feature", "Active specguard mode is visual+feature, approval on."),
-            ("feature no-approval", "feature", "Active specguard mode is feature, approval off."),
-            ("visual", "visual", "Active specguard mode is visual."),
+            ("feature", "specguard: mode feature, approval on (confirmed by you)",
+             "Active specguard mode is feature, approval on."),
+            ("hard", "specguard: mode hard, approval on (confirmed by you)",
+             "Active specguard mode is hard, approval on."),
+            ("visual+feature", "specguard: mode visual+feature, approval on (confirmed by you)",
+             "Active specguard mode is visual+feature, approval on."),
+            ("feature no-approval", "specguard: mode feature, approval off (confirmed by you)",
+             "Active specguard mode is feature, approval off."),
+            ("visual", "specguard: mode visual (confirmed by you)", "Active specguard mode is visual."),
         ]
-        for marker_set, shown, status in cases:
+        for marker_set, message, status in cases:
             with self.subTest(marker_set):
                 self.reset()
                 out = self.answer(question_text(marker_set), YES)
-                self.assertEqual(out["systemMessage"], "specguard: mode {} (confirmed by you)".format(shown))
+                self.assertEqual(out["systemMessage"], message)
                 self.assertEqual(self.status(), status)
 
     def test_MC_4_simple_from_feature_session(self):
@@ -193,41 +198,34 @@ class TestAnswerSwitch(Base):
         self.assertEqual(out["systemMessage"], "specguard: mode simple (confirmed by you)")
         self.assertEqual(self.status(), "Active specguard mode is simple.")
 
-    def test_MC_4_message_never_names_approval(self):
-        cases = [
-            ("simple", "simple"),
-            ("visual", "visual"),
-            ("feature", "feature"),
-            ("hard", "hard"),
-            ("visual+feature", "visual+feature"),
-            ("feature no-approval", "feature"),
-        ]
-        for marker_set, shown in cases:
+    def test_MC_4_set_without_feature_or_hard_names_no_approval(self):
+        for marker_set in ("simple", "visual"):
             with self.subTest(marker_set):
                 self.reset()
                 out = self.answer(question_text(marker_set), YES)
-                self.assertEqual(out["systemMessage"], "specguard: mode {} (confirmed by you)".format(shown))
-                self.assertNotIn("approval", out["systemMessage"])
+                self.assertEqual(out["systemMessage"], "specguard: mode {} (confirmed by you)".format(marker_set))
 
     def test_MC_4_hard_no_approval_refused(self):
         out = self.answer(question_text("hard", " no-approval"), YES)
         lines = out["systemMessage"].splitlines()
-        self.assertEqual(lines, ["specguard: mode hard (confirmed by you)", REFUSAL])
+        self.assertEqual(lines, ["specguard: mode hard, approval on (confirmed by you)", REFUSAL])
         self.assertEqual(self.status(), "Active specguard mode is hard, approval on.")
 
     def test_MC_4_approval_default_false_gives_off(self):
         self.reset(config={"version": 1, "modes": {"default": "simple", "approval_default": False}})
-        self.answer(question_text("feature"), YES)
+        out = self.answer(question_text("feature"), YES)
+        self.assertEqual(out["systemMessage"], "specguard: mode feature, approval off (confirmed by you)")
         self.assertEqual(self.status(), "Active specguard mode is feature, approval off.")
 
     def test_MC_4_approval_default_absent_gives_on(self):
         self.reset(config={"version": 1, "modes": {"default": "simple"}})
-        self.answer(question_text("feature"), YES)
+        out = self.answer(question_text("feature"), YES)
+        self.assertEqual(out["systemMessage"], FEATURE_ON)
         self.assertEqual(self.status(), "Active specguard mode is feature, approval on.")
 
     def test_MC_4_answers_only_in_tool_response(self):
         out = self.answer(question_text("feature"), YES, where="response")
-        self.assertEqual(out["systemMessage"], "specguard: mode feature (confirmed by you)")
+        self.assertEqual(out["systemMessage"], FEATURE_ON)
         self.assertEqual(self.status(), "Active specguard mode is feature, approval on.")
 
     def test_MC_5_rules_delivered(self):
@@ -303,7 +301,7 @@ class TestTextFallback(Base):
             with self.subTest(reply):
                 self.reset()
                 out = self.text_switch("feature", reply)
-                self.assertEqual(out["systemMessage"], "specguard: mode feature (confirmed by you)")
+                self.assertEqual(out["systemMessage"], FEATURE_ON)
                 ctx = self.context(out)
                 self.assertIn("Feature mode rules.", ctx)
                 self.assertTrue(ctx.endswith("Active specguard mode is feature, approval on."))
@@ -314,7 +312,7 @@ class TestTextFallback(Base):
             with self.subTest(reply):
                 self.reset()
                 out = self.text_switch("feature", reply)
-                self.assertEqual(out["systemMessage"], "specguard: mode feature (confirmed by you)")
+                self.assertEqual(out["systemMessage"], FEATURE_ON)
                 self.assertIn("Feature mode rules.", self.context(out))
 
     def test_MC_10_approval_word_without_open_request_adds_no_line(self):
@@ -323,7 +321,7 @@ class TestTextFallback(Base):
                 self.reset()
                 self.write_session()
                 out = self.text_switch("feature", reply)
-                self.assertEqual(out["systemMessage"], "specguard: mode feature (confirmed by you)")
+                self.assertEqual(out["systemMessage"], FEATURE_ON)
                 self.assertEqual(len(out["systemMessage"].splitlines()), 1)
 
     def test_MC_10_message_exact_for_simple_and_visual(self):
@@ -335,6 +333,14 @@ class TestTextFallback(Base):
                 self.assertEqual(out["systemMessage"], "specguard: mode {} (confirmed by you)".format(marker_set))
                 self.assertNotIn("approval", out["systemMessage"])
                 self.assertEqual(self.status(), "Active specguard mode is {}.".format(marker_set))
+
+    def test_MC_10_hard_message_exact(self):
+        out = self.text_switch("hard", "yes")
+        self.assertEqual(out["systemMessage"], "specguard: mode hard, approval on (confirmed by you)")
+
+    def test_MC_10_no_approval_marker_message_exact(self):
+        out = self.text_switch("feature no-approval", "ok")
+        self.assertEqual(out["systemMessage"], "specguard: mode feature, approval off (confirmed by you)")
 
     def test_MC_10_combined_set_status_line(self):
         out = self.text_switch("visual+feature", "давай")
@@ -387,7 +393,7 @@ class TestTextFallback(Base):
         with self.subTest("no-approval"):
             self.reset()
             out = self.text_switch("feature no-approval")
-            self.assertEqual(out["systemMessage"], "specguard: mode feature (confirmed by you)")
+            self.assertEqual(out["systemMessage"], "specguard: mode feature, approval off (confirmed by you)")
             self.assertEqual(self.status(), "Active specguard mode is feature, approval off.")
         with self.subTest("hard no-approval"):
             self.reset()
@@ -420,7 +426,7 @@ class TestTextFallback(Base):
             with self.subTest(name):
                 self.reset()
                 out = self.reply("yes", self.transcript(lines))
-                self.assertEqual(out["systemMessage"], "specguard: mode feature (confirmed by you)")
+                self.assertEqual(out["systemMessage"], FEATURE_ON)
 
 
 class TestLogging(Base):

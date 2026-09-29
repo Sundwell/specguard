@@ -44,15 +44,24 @@ def _head_blob_ids_strict(ctx, specs):
     return True, blobs
 
 
-def _has_advocate_report(reports, stem, after_ts):
+def _after_launch(entry, launch):
+    if launch is None:
+        return True
+    seq, launch_seq = entry.get("seq"), launch.get("seq")
+    if seq is not None and launch_seq is not None:
+        return seq > launch_seq
+    at, launch_at = entry.get("at"), launch.get("at")
+    if at is None:
+        return False
+    return launch_at is None or at > launch_at
+
+
+def _has_advocate_report(reports, stem, launch):
     for path, entries in reports.items():
         if not _report_name_matches(os.path.basename(path), stem):
             continue
         for entry in entries:
-            at = entry.get("at")
-            if at is None:
-                continue
-            if after_ts is None or at > after_ts:
+            if _after_launch(entry, launch):
                 return True
     return False
 
@@ -117,8 +126,7 @@ def rule_advocate_gate(ctx):
             last_launch = launches.get(spec)
             if last_launch and last_launch.get("sha256") == sha256:
                 continue
-            after_ts = last_launch.get("at") if last_launch else None
-            if _has_advocate_report(reports, _stem(spec), after_ts):
+            if _has_advocate_report(reports, _stem(spec), last_launch or None):
                 continue
             needing.append(spec)
 
