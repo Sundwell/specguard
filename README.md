@@ -116,19 +116,17 @@ specguard has no runtime dependency on oh-my-claudecode, but the two can meet in
 
 Install once for your user account. A project without `.claude/specguard.json` gets nothing from the plugin, every hook exits in about 20 ms with no output, so a project is switched on by its config alone.
 
+Claude Code runs a plugin from a directory marketplace in place, so the marketplace points at a release folder, never at this repository; otherwise the guard would protect the repository as its own plugin root and every edit here would change the running guard at once. `tools/release.sh` publishes the committed plugin files to `~/.local/share/specguard-release` (tests must be green and the plugin folders clean) and updates the installed plugin.
+
 ```bash
-claude plugin marketplace add /path/to/specguard
+tools/release.sh                                  # first run creates the release folder, the update step fails once
+claude plugin marketplace add ~/.local/share/specguard-release
 claude plugin install specguard@specguard --scope user
 ```
 
 Then open Claude Code in a project and ask it to set specguard up; the `specguard:guide` skill tells it to inspect the repo, draft `.claude/specguard.json` and write it only after your go. Restart the session with `claude --continue` so the rules load. A project that already has its own guard hooks needs them removed first, or both will gate the same calls.
 
-Update from a terminal outside a specguard project (rule 3 refuses a child `claude` process inside one), then restart open sessions with `claude --continue`.
-
-```bash
-claude plugin marketplace update specguard
-claude plugin update specguard@specguard --scope user
-```
+Update - commit, then run `tools/release.sh` from a terminal (inside a specguard session rule 3 refuses a direct `claude` call), then restart open sessions with `claude --continue`.
 
 Rollback of one project - delete `.claude/specguard.json` and `.claude/specguard/`, restore anything the switch replaced from its backup, restart open sessions. Rollback everywhere - `claude plugin uninstall specguard@specguard --scope user`. `--scope local` installs per project still work if you prefer them; do not combine them with the user install in the same project, or the hooks run twice.
 
