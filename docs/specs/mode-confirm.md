@@ -23,7 +23,7 @@ Tests drive the hook as a process through `tests/helpers.py`, never by importing
 - **MC-1** A question carrying a mode marker is allowed to be asked only when it has at least two options and exactly one option label contains `✓`. With no `✓` option, with two or more, or with a single option, the `PreToolUse` is denied with a reason beginning `specguard: ` that mentions `✓`. A question without any marker is not checked by this rule. Why - the hook recognises the switching option by structure, not by words.
 - **MC-2** An `AskUserQuestion` whose input carries an `answers` field is denied with a reason beginning `specguard: ` (`AskUserQuestion may not carry pre-filled answers`), marker or not. Why - the agent must not answer for the user.
 - **MC-3** A question may not carry a mode marker together with a spec approval marker of an open request (`specguard-approve <spec>@<first 7 hex of sha256>`) or the pending visual marker (`specguard-approve visual@<n>`). It is denied with a reason that contains `may not mix`. Why - one click must mean one thing.
-- **MC-4** When the user's answer to a marked question is the label of the `✓` option, the mode switches to the marker's set. The output is the `systemMessage` `specguard: mode <set> (confirmed by you)`, and the status line of the next prompt shows the new set. The approval flag is `modes.approval_default` (on when the config has no such key), always on when the set holds `hard`, and off when the marker ends with `no-approval` (refused with the extra line `specguard: no-approval refused, hard mode always requires approval` in a set holding `hard`). Why - his click is the switch, with the same approval rules as a phrase.
+- **MC-4** When the user's answer to a marked question is the label of the `✓` option, the mode switches to the marker's set. The output is the `systemMessage` `specguard: mode <set> (confirmed by you)`, which never names approval for any set, and the status line of the next prompt shows the new set. The approval flag is `modes.approval_default` (on when the config has no such key), always on when the set holds `hard`, and off when the marker ends with `no-approval` (refused with the extra line `specguard: no-approval refused, hard mode always requires approval` in a set holding `hard`). Why - his click is the switch, with the same approval rules as a phrase.
 - **MC-5** The switch by answer also delivers the mode rules to the agent. The output's `hookSpecificOutput` has `hookEventName` `PostToolUse` and an `additionalContext` that holds the same rule blocks as a phrase switch (`Feature mode rules.` for a set holding `feature`, `Hard mode adds.` for `hard`, `Visual mode rules.` for `visual`, no mode rules for `simple`). Why - the agent needs the rules of the mode it is now in, and the next prompt line only names the mode.
 - **MC-6** Any other answer to a marked question (the label of a non-`✓` option, free text, a label that matches no option) changes nothing and prints `{"systemMessage": "specguard: mode unchanged"}`. Why - declining is not a switch.
 - **MC-7** A `✓` answer to a marker whose set is not an accepted one (`simple+feature`, `feature+hard`, `hard+feature`, `turbo`) changes nothing and prints a `systemMessage` beginning `specguard: mode not switched,` that contains `is not a valid combination`. Why - the user sees why nothing happened.
@@ -53,6 +53,8 @@ Tests drive the hook as a process through `tests/helpers.py`, never by importing
 | MC-3 | no open request, question holds `specguard-approve docs/specs/x.md@aaaaaaa` and `specguard-mode feature`, options ok | allowed (the spec marker is not an open one) |
 | MC-4 | marker `feature`, answer `✓ Switch` | message `specguard: mode feature (confirmed by you)`; status line `feature, approval on` |
 | MC-4 | marker `hard`, answer the `✓` label | message, status line `hard, approval on` |
+| MC-4 | marker `simple` from a `feature` session, the `✓` label | message exactly `specguard: mode simple (confirmed by you)` |
+| MC-4 | marker `visual`, the `✓` label | message exactly `specguard: mode visual (confirmed by you)` |
 | MC-4 | marker `visual+feature`, answer the `✓` label | status line `Active specguard mode is visual+feature, approval on.` |
 | MC-4 | marker `simple` from a `feature` session | status line `Active specguard mode is simple.` |
 | MC-4 | marker `feature no-approval` | status line `feature, approval off` |
@@ -86,6 +88,8 @@ Tests drive the hook as a process through `tests/helpers.py`, never by importing
 | MC-10 | reply `yes!` | switch |
 | MC-10 | reply `да го` | switch |
 | MC-10 | reply `yes ok` | switch |
+| MC-10 | marker `simple`, reply `yes` | message exactly `specguard: mode simple (confirmed by you)` |
+| MC-10 | marker `visual`, reply `yes` | message exactly `specguard: mode visual (confirmed by you)` |
 | MC-10 | marker `visual+feature`, reply `давай` | status line `visual+feature` |
 | MC-11 | reply `да нет` | no output, no switch |
 | MC-11 | reply `не го` | no output |

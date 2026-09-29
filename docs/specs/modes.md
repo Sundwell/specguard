@@ -19,7 +19,7 @@ Tests drive the hook as a process through `tests/helpers.py`, never by importing
 
 ## Rules
 
-- **MO-1** The command `/specguard:mode <set> [no-approval]` switches the session to `<set>` when it is one of `simple`, `feature`, `hard`, `visual`, `visual+feature`, `visual+hard`. The output is a `systemMessage` that is exactly `specguard: mode <set>, approval on` or `specguard: mode <set>, approval off`. The status line of the next prompt shows the new set. Why - the command is the primary, language-neutral switch.
+- **MO-1** The command `/specguard:mode <set> [no-approval]` switches the session to `<set>` when it is one of `simple`, `feature`, `hard`, `visual`, `visual+feature`, `visual+hard`. The output is a `systemMessage` that is exactly `specguard: mode <set>, approval on` or `specguard: mode <set>, approval off` when `<set>` holds `feature` or `hard`, and exactly `specguard: mode <set>` for `simple` and `visual`, which say nothing about approval. The status line of the next prompt shows the new set. Why - the command is the primary, language-neutral switch, and approval only means something where a gate exists.
 - **MO-2** Approval after a switch. Without `no-approval` the approval flag is `modes.approval_default` (true when the config has no such key), except in a set holding `hard`, where it is always on. With `no-approval` it is off. Why - a switch never carries approval over from the previous mode.
 - **MO-3** `no-approval` together with a set holding `hard` is refused. The switch still happens, approval stays on, and the `systemMessage` is two lines, the `specguard: mode <set>, approval on` line and then `specguard: no-approval refused, hard mode always requires approval`. Why - hard mode cannot run without approval.
 - **MO-4** A command that is not exactly one accepted set optionally followed by the single word `no-approval` changes nothing and prints a `systemMessage` beginning `specguard: mode not switched, usage /specguard:mode` that lists the accepted sets. That covers empty arguments, an unknown mode word, a pair that is not accepted (`simple+feature`, `feature+hard`, `hard+feature`), any second word other than `no-approval`, and a third word. Why - a typo must not silently change the mode.
@@ -42,7 +42,11 @@ Tests drive the hook as a process through `tests/helpers.py`, never by importing
 | Rule | Input | Expected |
 |---|---|---|
 | MO-1 | command `feature` | message `specguard: mode feature, approval on`; status line `Active specguard mode is feature, approval on.` |
-| MO-1 | command `simple` | message `specguard: mode simple, approval on` |
+| MO-1 | command `simple` | message exactly `specguard: mode simple`, no `approval` in it |
+| MO-1 | command `visual` | message exactly `specguard: mode visual`, no `approval` in it |
+| MO-1 | command `simple no-approval` | message exactly `specguard: mode simple` |
+| MO-1 | command `visual no-approval` | message exactly `specguard: mode visual` |
+| MO-1 | config `approval_default` false, command `simple` | message exactly `specguard: mode simple` |
 | MO-1 | command `visual+feature` | message `specguard: mode visual+feature, approval on` |
 | MO-1 | command `visual+hard` | message `specguard: mode visual+hard, approval on` |
 | MO-1 | command `hard` | message `specguard: mode hard, approval on` |
@@ -63,6 +67,9 @@ Tests drive the hook as a process through `tests/helpers.py`, never by importing
 | MO-5 | command `hard` with `agent_type` `specguard:tester` | no output, mode unchanged |
 | MO-6 | `go feature spec` | feature, approval on |
 | MO-6 | `го фичспек` | feature |
+| MO-6 | `go simple` | message exactly `specguard: mode simple` |
+| MO-6 | `go visual` | message exactly `specguard: mode visual` |
+| MO-6 | `го визуал без апрува` | message exactly `specguard: mode visual` |
 | MO-6 | `го фічспек` | feature |
 | MO-6 | `режим фичспек` | feature |
 | MO-6 | `go hard mode` | hard |

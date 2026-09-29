@@ -118,8 +118,10 @@ class ModesSpec(unittest.TestCase):
     def test_MO_1_command_sets_mode_message_and_status_line(self):
         rows = [
             ("feature", "specguard: mode feature, approval on", line("feature", "on")),
-            ("simple", "specguard: mode simple, approval on", line("simple")),
-            ("visual", "specguard: mode visual, approval on", line("visual")),
+            ("simple", "specguard: mode simple", line("simple")),
+            ("visual", "specguard: mode visual", line("visual")),
+            ("simple no-approval", "specguard: mode simple", line("simple")),
+            ("visual no-approval", "specguard: mode visual", line("visual")),
             ("visual+feature", "specguard: mode visual+feature, approval on",
              line("visual+feature", "on")),
             ("visual+hard", "specguard: mode visual+hard, approval on", line("visual+hard", "on")),
@@ -131,6 +133,12 @@ class ModesSpec(unittest.TestCase):
                 out = env.command(args)
                 self.assertEqual(out["systemMessage"], msg)
                 self.assertEqual(env.status(), status)
+
+    def test_MO_1_simple_message_says_nothing_about_approval_when_default_is_off(self):
+        env = Env(self, {"version": 1, "modes": {"default": "simple", "approval_default": False}})
+        out = env.command("simple")
+        self.assertEqual(out["systemMessage"], "specguard: mode simple")
+        self.assertEqual(env.status(), line("simple"))
 
     # MO-2
 
@@ -260,6 +268,19 @@ class ModesSpec(unittest.TestCase):
         env = Env(self)
         out = env.phrase("го фичспек без апруву")
         self.assertEqual(out["systemMessage"], "specguard: mode feature, approval off")
+
+    def test_MO_6_simple_and_visual_phrase_messages_omit_approval(self):
+        rows = [
+            ("go simple", "specguard: mode simple", line("simple")),
+            ("go visual", "specguard: mode visual", line("visual")),
+            ("го визуал без апрува", "specguard: mode visual", line("visual")),
+        ]
+        for prompt, msg, status in rows:
+            with self.subTest(prompt=prompt):
+                env = Env(self)
+                out = env.phrase(prompt)
+                self.assertEqual(out["systemMessage"], msg)
+                self.assertEqual(env.status(), status)
 
     def test_MO_6_hard_phrase_with_opt_out_is_refused_like_the_command(self):
         env = Env(self)

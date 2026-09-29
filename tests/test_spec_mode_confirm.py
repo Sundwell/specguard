@@ -193,6 +193,22 @@ class TestAnswerSwitch(Base):
         self.assertEqual(out["systemMessage"], "specguard: mode simple (confirmed by you)")
         self.assertEqual(self.status(), "Active specguard mode is simple.")
 
+    def test_MC_4_message_never_names_approval(self):
+        cases = [
+            ("simple", "simple"),
+            ("visual", "visual"),
+            ("feature", "feature"),
+            ("hard", "hard"),
+            ("visual+feature", "visual+feature"),
+            ("feature no-approval", "feature"),
+        ]
+        for marker_set, shown in cases:
+            with self.subTest(marker_set):
+                self.reset()
+                out = self.answer(question_text(marker_set), YES)
+                self.assertEqual(out["systemMessage"], "specguard: mode {} (confirmed by you)".format(shown))
+                self.assertNotIn("approval", out["systemMessage"])
+
     def test_MC_4_hard_no_approval_refused(self):
         out = self.answer(question_text("hard", " no-approval"), YES)
         lines = out["systemMessage"].splitlines()
@@ -309,6 +325,16 @@ class TestTextFallback(Base):
                 out = self.text_switch("feature", reply)
                 self.assertEqual(out["systemMessage"], "specguard: mode feature (confirmed by you)")
                 self.assertEqual(len(out["systemMessage"].splitlines()), 1)
+
+    def test_MC_10_message_exact_for_simple_and_visual(self):
+        for marker_set in ("simple", "visual"):
+            with self.subTest(marker_set):
+                self.reset()
+                self.write_session()
+                out = self.text_switch(marker_set, "ok")
+                self.assertEqual(out["systemMessage"], "specguard: mode {} (confirmed by you)".format(marker_set))
+                self.assertNotIn("approval", out["systemMessage"])
+                self.assertEqual(self.status(), "Active specguard mode is {}.".format(marker_set))
 
     def test_MC_10_combined_set_status_line(self):
         out = self.text_switch("visual+feature", "давай")

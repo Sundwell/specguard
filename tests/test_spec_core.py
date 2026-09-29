@@ -551,7 +551,7 @@ class CombinedOutputTests(Base):
              "Active specguard mode is feature, approval on."),
             ("go feature spec no approval", None, "specguard: mode feature, approval off",
              "Active specguard mode is feature, approval off."),
-            ("go simple", {"modes": ["feature"]}, "specguard: mode simple, approval on",
+            ("go simple", {"modes": ["feature"]}, "specguard: mode simple",
              "Active specguard mode is simple."),
         )
         for text, sess, message, line in rows:

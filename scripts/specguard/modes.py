@@ -236,6 +236,8 @@ def _apply_switch_core(ctx, modes_set, optout, set_by):
 def _switch_message_lines(modes_set, approval, hard_refused, confirmed):
     if confirmed:
         lines = ["specguard: mode {} (confirmed by you)".format(_format_modes(modes_set))]
+    elif not ({"feature", "hard"} & set(modes_set)):
+        lines = ["specguard: mode {}".format(_format_modes(modes_set))]
     else:
         lines = [
             "specguard: mode {}, approval {}".format(_format_modes(modes_set), "on" if approval else "off")
