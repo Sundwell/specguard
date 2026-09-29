@@ -73,7 +73,12 @@ def _format_last_green(path):
 
 
 def _status(project_dir):
-    _, problems = _load_raw_config(project_dir)
+    raw, problems = _load_raw_config(project_dir)
+    modes_cfg = raw.get("modes") if isinstance(raw, dict) else None
+    if not isinstance(modes_cfg, dict):
+        modes_cfg = {}
+    default_mode = modes_cfg.get("default", "simple")
+    default_approval = modes_cfg.get("approval_default", True)
     state = State(project_dir)
     lines = ["specguard: status for {}".format(project_dir)]
 
@@ -84,12 +89,13 @@ def _status(project_dir):
             for name in names:
                 sid = name[:-5]
                 sess = state.read_json(os.path.join("sessions", name), {}) or {}
-                modes = sess.get("modes") or []
+                modes = sess.get("modes") or [default_mode]
+                approval = True if "hard" in modes else sess.get("approval", default_approval)
                 lines.append(
                     "session {} - modes {} - approval {} - open requests {}".format(
                         sid,
-                        "+".join(modes) or "simple",
-                        sess.get("approval"),
+                        "+".join(modes),
+                        "on" if approval else "off",
                         ", ".join(sorted((sess.get("requests") or {}).keys())) or "none",
                     )
                 )

@@ -32,9 +32,11 @@ class Ctx:
 
     def session(self):
         raw = self.state.session(self.root_session) or {}
+        modes = raw.get("modes") or [self.cfg.modes.default]
+        approval = raw.get("approval", self.cfg.modes.approval_default)
         return {
-            "modes": raw.get("modes") or [self.cfg.modes.default],
-            "approval": raw.get("approval", self.cfg.modes.approval_default),
+            "modes": modes,
+            "approval": True if "hard" in modes else approval,
             "set_at": raw.get("set_at"),
             "set_by": raw.get("set_by", "default"),
             "transcript_path": raw.get("transcript_path") or self.data.get("transcript_path"),

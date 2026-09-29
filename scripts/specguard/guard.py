@@ -274,8 +274,9 @@ def _simple_commands(command):
     tokens = _strip_safe_redirections(tokens)
 
     groups = [[]]
-    for tok in tokens:
-        if tok.operator:
+    for i, tok in enumerate(tokens):
+        redirect_amp = tok.operator and tok.text == "&" and i + 1 < len(tokens) and tokens[i + 1].text.startswith(">")
+        if tok.operator and not redirect_amp:
             groups.append([])
         else:
             groups[-1].append(tok)
@@ -461,7 +462,10 @@ def _tester_grep_reason(cfg):
 
 
 def _tester_bash_reason(cfg):
-    return "The tester may not run commands that name {}.".format(_hidden_list_text(cfg))
+    tests, docs = _roots_text(cfg)
+    return "The tester may not run commands that name {}. Allowed roots are {} and {}.".format(
+        _hidden_list_text(cfg), tests, docs
+    )
 
 
 def _glob_hidden(ctx, tool_input):
@@ -488,7 +492,11 @@ def _tester_grep_allowed(ctx, raw):
     if not raw:
         return False
     info = paths.classify(ctx, raw, _cwd(ctx))
-    return info.repo_rel is not None and (info.test or info.docs or info.tester_readable)
+    if info.repo_rel is None:
+        return False
+    if info.hidden and not info.tester_readable:
+        return False
+    return info.test or info.docs or info.tester_readable
 
 
 _FORBIDDEN_BASH_CHARS = set(" \t/*?[]{};&|$()<>`")
@@ -517,7 +525,7 @@ def _tester_bash_denied(ctx, command):
     cfg = ctx.cfg
     stripped = command
     for readable in cfg.tester_readable:
-        stripped = stripped.replace(readable, "")
+        stripped = re.sub(r"(?<![A-Za-z0-9_.-])" + re.escape(readable) + r"(?![A-Za-z0-9_.-])", "", stripped)
 
     hidden_rx = paths.hidden_word_regex(cfg)
     name_rx = paths.name_regex(cfg)
@@ -656,8 +664,15 @@ def _executor_lock_reason(mode_word):
     ).format(mode_word)
 
 
+def _session_modes(ctx):
+    modes = ctx.session()["modes"]
+    if isinstance(modes, str):
+        return set(modes.split("+"))
+    return set(modes)
+
+
 def _rule_executor_lock(ctx):
-    modes = ctx.modes()
+    modes = _session_modes(ctx)
     if not ({"feature", "hard"} & modes):
         return None
     if ctx.tool_name not in _WRITE_TOOLS:

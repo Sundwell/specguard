@@ -246,4 +246,4 @@ def path_regex(cfg):
     escaped = [re.escape(p.strip("/")) for p in paths if p]
     if not escaped:
         return None
-    return re.compile(r"(^|/)(" + "|".join(escaped) + r")(/|$)")
+    return re.compile(r"(^|[^A-Za-z0-9_.-])(" + "|".join(escaped) + r")($|[^A-Za-z0-9_.-])")

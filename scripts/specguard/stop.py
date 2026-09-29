@@ -2,6 +2,7 @@ import fnmatch
 import glob
 import os
 import re
+import signal
 import subprocess
 import time
 
@@ -53,6 +54,8 @@ def _is_dirty(cfg, repo_dir):
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=GIT_TIMEOUT_S)
     except (subprocess.TimeoutExpired, OSError):
+        return True
+    if result.returncode != 0:
         return True
     return bool(result.stdout.strip())
 
@@ -170,21 +173,29 @@ def on_stop(ctx):
         )
         return core.block(ctx, "stop-skip-scan", reason)
 
+    proc = subprocess.Popen(
+        cfg.stop.run,
+        shell=True,
+        cwd=ctx.project_dir,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
     try:
-        result = subprocess.run(
-            cfg.stop.run,
-            shell=True,
-            cwd=ctx.project_dir,
-            capture_output=True,
-            text=True,
-            timeout=cfg.stop.timeout,
-        )
+        stdout, stderr = proc.communicate(timeout=cfg.stop.timeout)
     except subprocess.TimeoutExpired:
+        # killing only the shell leaves a child holding the pipes open, so the whole group goes
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        proc.communicate()
         reason = "specguard: stop.run timed out after {}s. Fix or speed up the test command.".format(cfg.stop.timeout)
         return core.block(ctx, "stop-timeout", reason)
 
-    if result.returncode != 0:
-        lines = _summary_lines(cfg, (result.stdout or "") + (result.stderr or ""))
+    if proc.returncode != 0:
+        lines = _summary_lines(cfg, (stdout or "") + (stderr or ""))
         reason = "specguard: tests failed. Fix the code, never the tests, or say in the report which spec rules are red and why."
         if lines:
             reason += "\n\n" + "\n".join(lines)

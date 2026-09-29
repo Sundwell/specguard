@@ -27,8 +27,7 @@ def _locked(path):
                 break
             except OSError:
                 if time.monotonic() >= deadline:
-                    fcntl.flock(fh, fcntl.LOCK_EX)
-                    break
+                    raise TimeoutError("state lock {} busy for {} s".format(lock_path, LOCK_TIMEOUT_S))
                 time.sleep(0.02)
         yield
     finally:
