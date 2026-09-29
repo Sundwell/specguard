@@ -7,6 +7,7 @@ import time
 
 from specguard import core
 from specguard import modes as modes_mod
+from specguard import paths
 
 _SPEC_TOKEN_RE = re.compile(r"[A-Za-z0-9_./\-]+\.md")
 
@@ -182,16 +183,32 @@ def rule_messages(ctx):
 # ---------------------------------------------------------------------------
 
 def _extract_spec_refs(ctx, text):
+    # A reference is a *.md token (quotes and backticks are already outside
+    # the token's character class, so they and any trailing punctuation like
+    # "," "." ")" ":" fall away on their own). It counts when, resolved
+    # against the repo dir, the project root or the call's own cwd in turn,
+    # it lands on a non-README *.md file under <repo>/<specs_dir> - covering
+    # repo-relative, project-relative (repo-prefixed), absolute and
+    # "./"-prefixed forms. A bare name with no "/" also counts if it exists
+    # directly under specs_dir. hardgate.py imports this helper by name.
     specs_dir = (ctx.cfg.specs_dir or "").strip("/")
+    cwd = ctx.data.get("cwd") or ctx.project_dir
+    bases = []
+    for base in (ctx.repo_dir, ctx.project_dir, cwd):
+        if base and base not in bases:
+            bases.append(base)
+
     found = []
     seen = set()
     for tok in _SPEC_TOKEN_RE.findall(text or ""):
-        norm = tok.replace("\\", "/").lstrip("./")
         rel = None
-        if specs_dir and (norm == specs_dir or norm.startswith(specs_dir + "/")):
-            rel = norm
-        elif "/" not in norm and specs_dir:
-            maybe = "{}/{}".format(specs_dir, norm)
+        for base in bases:
+            info = paths.classify(ctx, tok, base)
+            if info.spec:
+                rel = info.repo_rel
+                break
+        if rel is None and specs_dir and "/" not in tok:
+            maybe = "{}/{}".format(specs_dir, tok)
             if os.path.isfile(os.path.join(ctx.repo_dir, maybe)):
                 rel = maybe
         if rel and rel not in seen:

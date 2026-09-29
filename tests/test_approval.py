@@ -414,5 +414,124 @@ class SendMessageAndScheduleTests(ApprovalTestCase):
         self.assertIsNone(out)
 
 
+class SpecReferenceFormTests(unittest.TestCase):
+    """Rule 9's spec-reference extraction on a parfume-shaped project - the
+    outer folder is the project root, the repo is the inner ``sample-shops``
+    folder, so a natural reference in a launch prompt carries the repo
+    prefix. Fixed after a live-run bug (see runs/1c.md, "Fix after live
+    run")."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="specguard-specref-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.state_home = tempfile.mkdtemp(prefix="specguard-specref-state-")
+        self.addCleanup(shutil.rmtree, self.state_home, ignore_errors=True)
+        self.project_dir = helpers.make_project(
+            self.tmp,
+            config={"version": 1, "repo": "sample-shops", "modes": {"default": "feature"}},
+            files={"sample-shops/docs/specs/domain-phone.md": "rule one\n"},
+            git=False,
+        )
+        # the repo is the inner sample-shops folder; commit there, not at
+        # the outer project root, matching the real parfume-stuff layout.
+        self.repo_dir = os.path.join(self.project_dir, "sample-shops")
+        _git("init", "-q", cwd=self.repo_dir)
+        _git("config", "user.email", "t@example.com", cwd=self.repo_dir)
+        _git("config", "user.name", "specguard tests", cwd=self.repo_dir)
+        _git("add", "-A", cwd=self.repo_dir)
+        _git("commit", "-q", "-m", "initial", cwd=self.repo_dir)
+
+    def _run(self, prompt, session_id="s1", cwd=None):
+        payload = helpers.pre_tool_use(
+            session_id,
+            "Agent",
+            {"subagent_type": "specguard:tester", "prompt": prompt},
+        )
+        if cwd:
+            payload["cwd"] = cwd
+        return helpers.run_hook("PreToolUse", payload, self.project_dir, state_home=self.state_home)
+
+    def _assert_passes(self, prompt, session_id, cwd=None):
+        code, out, err = self._run(prompt, session_id=session_id, cwd=cwd)
+        self.assertEqual(code, 0, err)
+        self.assertIsNone(out, "expected no deny for prompt {!r}, got {}".format(prompt, out))
+
+    def test_repo_relative_reference(self):
+        self._assert_passes(
+            "Run specguard:tester on docs/specs/domain-phone.md", "repo-rel", cwd=self.repo_dir
+        )
+
+    def test_project_relative_reference_with_repo_prefix(self):
+        self._assert_passes(
+            "Run specguard:tester on sample-shops/docs/specs/domain-phone.md",
+            "project-rel",
+            cwd=self.project_dir,
+        )
+
+    def test_absolute_reference(self):
+        abs_path = os.path.join(self.repo_dir, "docs", "specs", "domain-phone.md")
+        self._assert_passes(
+            "Run specguard:tester on {}".format(abs_path), "abs-ref", cwd=self.project_dir
+        )
+
+    def test_dot_slash_prefixed_reference(self):
+        self._assert_passes(
+            "Run specguard:tester on ./docs/specs/domain-phone.md", "dot-slash", cwd=self.repo_dir
+        )
+
+    def test_quoted_reference(self):
+        self._assert_passes(
+            'Run specguard:tester on "sample-shops/docs/specs/domain-phone.md"',
+            "quoted",
+            cwd=self.project_dir,
+        )
+
+    def test_backticked_reference(self):
+        self._assert_passes(
+            "Run specguard:tester on `sample-shops/docs/specs/domain-phone.md`",
+            "backticked",
+            cwd=self.project_dir,
+        )
+
+    def test_trailing_comma_period_paren_colon(self):
+        for suffix, label in ((",", "comma"), (".", "period"), (")", "paren"), (":", "colon")):
+            with self.subTest(suffix=suffix):
+                prompt = "Run specguard:tester on sample-shops/docs/specs/domain-phone.md{} now".format(
+                    suffix
+                )
+                self._assert_passes(prompt, "trail-" + label, cwd=self.project_dir)
+
+    def test_bare_name_reference(self):
+        self._assert_passes(
+            "Run specguard:tester on domain-phone.md", "bare-name", cwd=self.repo_dir
+        )
+
+    def test_report_destination_path_not_mistaken_for_a_spec(self):
+        # the report destination shares the .md suffix but lives outside
+        # specs_dir, so it must not be extracted as a spec reference; an
+        # edited, unapproved spec referenced in the same prompt must still
+        # deny (proves the report path was ignored, not silently accepted).
+        with open(os.path.join(self.repo_dir, "docs", "specs", "domain-phone.md"), "w") as f:
+            f.write("rule one edited\n")
+        code, out, err = self._run(
+            "Запусти субагента specguard:tester на sample-shops/docs/specs/domain-phone.md, "
+            "отчёт в .omc/research/tester/lab-domain-phone.md.",
+            session_id="report-path",
+            cwd=self.project_dir,
+        )
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+        self.assertIn("domain-phone.md", reason)
+        self.assertNotIn("lab-domain-phone", reason)
+
+    def test_exact_live_run_prompt_passes_on_committed_spec(self):
+        prompt = (
+            "Запусти субагента specguard:tester на sample-shops/docs/specs/domain-phone.md, "
+            "отчёт в .omc/research/tester/lab-domain-phone.md."
+        )
+        self._assert_passes(prompt, "live-run-prompt", cwd=self.project_dir)
+
+
 if __name__ == "__main__":
     unittest.main()
