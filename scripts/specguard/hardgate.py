@@ -71,12 +71,11 @@ def _deny(ctx, specs, reason):
     }
 
 
-def _needs_advocate_reason(ctx, spec):
-    stem = _stem(spec)
+def _needs_advocate_reason(ctx, specs):
     return (
         "specguard: hard mode requires the devils-advocate on {} first, report at "
-        "{}/{}-<date>.md. The task holds only the spec path, the plan row and the report path."
-    ).format(spec, ctx.cfg.reports.advocate, stem)
+        "{}/<spec>-<date>.md. The task holds only the spec path, the plan row and the report path."
+    ).format(", ".join(specs), ctx.cfg.reports.advocate)
 
 
 def rule_advocate_gate(ctx):
@@ -125,6 +124,6 @@ def rule_advocate_gate(ctx):
 
         if not needing:
             return None
-        return _deny(ctx, needing, _needs_advocate_reason(ctx, needing[0]))
+        return _deny(ctx, needing, _needs_advocate_reason(ctx, needing))
     except Exception:
         return _deny(ctx, [], "specguard: hard-mode advocate gate failed; the call is refused.")

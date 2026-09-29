@@ -43,7 +43,9 @@ VISUAL_RULES = """Visual mode rules.
 
 
 def _mode_label(modes):
-    return "+".join(modes) if modes else "simple"
+    if not modes:
+        return "simple"
+    return "+".join(sorted(modes, key=lambda m: m != "visual"))
 
 
 def mode_rules(modes, approval):
@@ -127,6 +129,8 @@ def _role_context(ctx, event):
         full = notes + "\n\n" + summary
         if len(full) <= MAX_CONTEXT_CHARS:
             return core.context(event, full)
+    if not notes:
+        return core.context(event, summary)
     return core.context(event, summary + "\nRead {} first.".format(rel))
 
 

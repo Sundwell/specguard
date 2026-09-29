@@ -171,9 +171,11 @@ def _user_prompt_submit(ctx):
     outs = [out]
     if switched_to is not None:
         outs.append(visual.on_mode_switch(ctx, switched_to))
-    outs.append(modes.on_text_confirm(ctx))
-    outs.append(approval.on_prompt(ctx))
-    outs.append(visual.on_prompt(ctx))
+    confirmed = modes.on_text_confirm(ctx)
+    outs.append(confirmed)
+    if not confirmed:
+        outs.append(approval.on_prompt(ctx))
+        outs.append(visual.on_prompt(ctx))
     outs.append(context_mod.prompt_line(ctx))
     return merge(*outs)
 

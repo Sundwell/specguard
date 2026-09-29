@@ -47,10 +47,12 @@ def load_packs():
     return packs
 
 
-def _normalize(text):
+def _normalize(text, newline_end=False):
     if not text:
         return ""
     t = text.lower()
+    if newline_end:
+        t = re.sub(r"\s*\n\s*", " ; ", t.strip())
     t = t.replace("ё", "е")
     for dash in _DASHES:
         t = t.replace(dash, "-")
@@ -191,7 +193,7 @@ def parse_mode_marker(text):
 
 
 def would_switch(text):
-    normalized = _normalize(text)
+    normalized = _normalize(text, newline_end=True)
     if normalized.endswith("?"):
         normalized = normalized[:-1].strip()
     return _parse_phrase(normalized) is not None
@@ -243,12 +245,12 @@ def _switch_message_lines(modes_set, approval, hard_refused, confirmed):
     return lines
 
 
-def _switch_context_output(modes_set, approval):
+def _switch_context_output(modes_set, approval, event="UserPromptSubmit"):
     rules_text = context_mod.mode_rules(sorted(modes_set), approval)
     ctx_body = context_mod.SESSION_INTRO + "\n\n" + context_mod.MODE_CONFIRM_RULE
     if rules_text:
         ctx_body += "\n\n" + rules_text
-    return core.context("UserPromptSubmit", ctx_body)
+    return core.context(event, ctx_body)
 
 
 def _apply_switch(ctx, modes_set, optout, set_by):
@@ -259,12 +261,12 @@ def _apply_switch(ctx, modes_set, optout, set_by):
     return core.merge(msg_out, ctx_out), modes_set
 
 
-def apply_confirmed_switch(ctx, modes_set, optout, set_by, with_context=False):
+def apply_confirmed_switch(ctx, modes_set, optout, set_by, context_event=None):
     hard_refused, approval = _apply_switch_core(ctx, modes_set, optout, set_by)
     lines = _switch_message_lines(modes_set, approval, hard_refused, confirmed=True)
     msg_out = core.message("\n".join(lines))
-    if with_context:
-        return core.merge(msg_out, _switch_context_output(modes_set, approval))
+    if context_event:
+        return core.merge(msg_out, _switch_context_output(modes_set, approval, context_event))
     return msg_out
 
 
@@ -282,7 +284,7 @@ def on_prompt(ctx):
     if not stripped or not stripped[0].isalpha():
         return None, None
 
-    normalized = _normalize(prompt)
+    normalized = _normalize(prompt, newline_end=True)
     if not normalized:
         return None, None
     ends_with_q = normalized.endswith("?")
@@ -352,7 +354,7 @@ def _invalid_marker_message(modes_set):
 
 
 def post_tool_use(ctx):
-    if ctx.tool_name != "AskUserQuestion":
+    if ctx.tool_name != "AskUserQuestion" or ctx.role != "executor":
         return None
     tool_input = ctx.tool_input or {}
     tool_response = ctx.data.get("tool_response") or {}
@@ -379,12 +381,16 @@ def post_tool_use(ctx):
         modes_set = parsed["modes"]
         if modes_set not in _ACCEPTED_SETS:
             return _invalid_marker_message(modes_set)
-        return apply_confirmed_switch(ctx, modes_set, parsed["optout"], "ask")
+        return apply_confirmed_switch(ctx, modes_set, parsed["optout"], "ask", "PostToolUse")
     return None
 
 
-def _confirm_word_tuples(packs):
-    return set(_candidates(packs, "approval_words")) | set(_candidates(packs, "mode_confirm_words"))
+def _is_confirm_reply(words, packs):
+    entries = set(_candidates(packs, "approval_words")) | set(_candidates(packs, "mode_confirm_words"))
+    if tuple(words) in entries:
+        return True
+    singles = {e[0] for e in entries if len(e) == 1}
+    return all(w in singles for w in words)
 
 
 def on_text_confirm(ctx):
@@ -400,12 +406,14 @@ def on_text_confirm(ctx):
     normalized = _normalize(prompt)
     if not normalized:
         return None
-    words = normalized.split()
+    if "?" in normalized:
+        return None
+    words = [w for w in (w.strip(".,!:;") for w in normalized.split()) if w]
     if not (1 <= len(words) <= 2):
         return None
 
     packs = load_packs()
-    if tuple(words) not in _confirm_word_tuples(packs):
+    if not _is_confirm_reply(words, packs):
         return None
 
     session = ctx.session()
@@ -423,4 +431,4 @@ def on_text_confirm(ctx):
     modes_set = parsed["modes"]
     if modes_set not in _ACCEPTED_SETS:
         return _invalid_marker_message(modes_set)
-    return apply_confirmed_switch(ctx, modes_set, parsed["optout"], "text", with_context=True)
+    return apply_confirmed_switch(ctx, modes_set, parsed["optout"], "text", "UserPromptSubmit")
