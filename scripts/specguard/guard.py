@@ -664,15 +664,8 @@ def _executor_lock_reason(mode_word):
     ).format(mode_word)
 
 
-def _session_modes(ctx):
-    modes = ctx.session()["modes"]
-    if isinstance(modes, str):
-        return set(modes.split("+"))
-    return set(modes)
-
-
 def _rule_executor_lock(ctx):
-    modes = _session_modes(ctx)
+    modes = ctx.modes()
     if not ({"feature", "hard"} & modes):
         return None
     if ctx.tool_name not in _WRITE_TOOLS:

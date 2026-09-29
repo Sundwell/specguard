@@ -62,6 +62,7 @@ Roles - an `agent_type` in `roles.tester` (default `["specguard:tester", "tester
 - CO-24 `--status` prints a read-only summary of the project and exits 0, also when the config has problems or there is no config. Its lines, in this order, are `specguard: status for <project dir>`; one `session <id> - modes <modes joined by +> - approval on|off - open requests <request specs joined by ", ", or none>` line per file in `sessions/` sorted by id, or `no sessions recorded yet`; one `approved <spec> (<first 7 characters of sha256>)` line per entry of `approved-specs.json` sorted by spec, or `no approved specs recorded`; `last green: never` or `last green: <YYYY-MM-DD HH:MM:SS local time of last-green>`; up to the last 5 lines of `log.jsonl`, each as `log: <line>`, or `log: empty`; `config: OK` or one `config problem: <problem>` line per problem of CO-23; `tree hash: <64 hex characters>`. It creates nothing in the state directory.
 - CO-25 A session file without `approval` or without `modes` is shown by `--status` with the defaults of CO-12 (`on` unless `modes.approval_default` is `false`; the mode `modes.default`), and a session whose modes include `hard` is shown as `approval on`.
 - CO-26 The tree hash of `--status` is the sha256 hex digest over every file under the directories `.claude-plugin`, `hooks`, `scripts`, `agents`, `skills` and `phrases` of `CLAUDE_PLUGIN_ROOT`, taken in the order of their `/`-separated paths relative to the root (string order of the whole path), each contributing its relative path in UTF-8, one NUL byte, its content and one NUL byte. Files in a `__pycache__` folder and files ending `.pyc` are skipped, and so is everything outside those six directories. A directory that does not exist is skipped. This is the value a pinned copy is compared by.
+- CO-27 Whenever a hook call prints a `hookSpecificOutput`, its `hookEventName` is the name of the event that call handles (the payload's `hook_event_name`), whichever part produced it - a refusal, context for the model or a mode switch. Claude Code drops the whole output, notice and context included, when the two differ. So a `/specguard:mode` command, which arrives as UserPromptExpansion, prints context whose `hookEventName` is `UserPromptExpansion`, not `UserPromptSubmit`.
 
 ## Examples
 
@@ -188,6 +189,19 @@ CO-20, CO-21 - config `{"version": 1}` unless said.
 | CO-20 | UserPromptSubmit `go simple` with session `s1` already `{"modes": ["feature"]}` | `systemMessage` is `specguard: mode simple, approval on`; `additionalContext` contains `Active specguard mode is simple.` |
 | CO-20 | UserPromptSubmit `please continue` by the executor | no `systemMessage`; `additionalContext` is the status line only |
 | CO-21 | SessionStart of `s1`, executor | `hookSpecificOutput.hookEventName` is `SessionStart`, `additionalContext` contains `specguard:guide` |
+
+CO-27 - config `{"version": 1}` unless said; expected is `hookSpecificOutput.hookEventName` of the printed object.
+
+| Rule | Call | Expected |
+|---|---|---|
+| CO-27 | UserPromptExpansion `helpers.user_prompt_expansion("s1", "specguard:mode", "feature")` by the executor | `UserPromptExpansion`, and `additionalContext` is present, and `systemMessage` is `specguard: mode feature, approval on` |
+| CO-27 | UserPromptExpansion `specguard:mode` `visual+feature` | `UserPromptExpansion` |
+| CO-27 | UserPromptSubmit `go feature spec` by the executor | `UserPromptSubmit` |
+| CO-27 | UserPromptSubmit `please continue` by the executor | `UserPromptSubmit` |
+| CO-27 | SessionStart of `s1`, executor | `SessionStart` |
+| CO-27 | SubagentStart `a1` `specguard:tester` | `SubagentStart` when any `hookSpecificOutput` is printed, otherwise empty stdout |
+| CO-27 | PreToolUse Read of a hidden path by `specguard:tester`, config with `hidden.segments` `["src"]` | `PreToolUse` on the refusal |
+| CO-27 | PostToolUse of any tool by the executor after a mode switch in the same session | when a `hookSpecificOutput` is printed, `PostToolUse` |
 
 CO-22, CO-23 - `--check-config`, configs written raw.
 

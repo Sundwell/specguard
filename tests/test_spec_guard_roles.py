@@ -405,5 +405,32 @@ class NestedFeatureTests(RolesBase):
         self.check_nested("test/a.ts", ALLOW)
 
 
+class SessionFileModes(RolesBase):
+    def write_executor_test_file(self, default_mode, session_modes):
+        cfg = make_config("ROLES")
+        cfg["modes"]["default"] = default_mode
+        helpers.make_project(self.project, config=cfg)
+        sessions = os.path.join(self.state_dir(), "sessions")
+        os.makedirs(sessions)
+        with open(os.path.join(sessions, "s1.json"), "w", encoding="utf-8") as f:
+            json.dump({"modes": session_modes}, f)
+        payload = helpers.pre_tool_use("s1", "Write", {"file_path": "test/a.ts"})
+        code, out, _err = helpers.run_hook(
+            "PreToolUse", payload, self.project, state_home=self.state_home
+        )
+        self.assertEqual(code, 0)
+        return out
+
+    def test_GR_13_session_file_feature_overrides_simple_default(self):
+        out = self.write_executor_test_file("simple", ["feature"])
+        self.assertIsNotNone(out)
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertEqual(self.last_log()["rule"], D7)
+
+    def test_GR_13_session_file_simple_overrides_feature_default(self):
+        out = self.write_executor_test_file("feature", ["simple"])
+        self.assertIsNone(out)
+
+
 if __name__ == "__main__":
     unittest.main()

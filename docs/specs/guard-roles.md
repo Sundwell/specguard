@@ -64,7 +64,7 @@ Paths are judged relative to the repo (`repo` in the config, the project directo
 
 ### Rule 7, executor test lock
 
-- **GR-13** When the session's modes include `feature` or `hard` (`feature`, `hard`, `visual+feature`, `visual+hard`), an executor's Edit, Write, MultiEdit or NotebookEdit on a test path is denied (rule 7). In `simple` and `visual` it is allowed. Non-test paths, paths outside the repo, Read, Grep, Glob and Bash are not touched by rule 7. The tester and the advocate are not subject to rule 7. Why: only the tester writes tests while a gated mode is on. Bash writes are a known limitation of this rule.
+- **GR-13** When the session's modes include `feature` or `hard` (`feature`, `hard`, `visual+feature`, `visual+hard`), an executor's Edit, Write, MultiEdit or NotebookEdit on a test path is denied (rule 7). In `simple` and `visual` it is allowed. The modes are the ones the session reports everywhere else (CO-12, CO-13) - the session file when there is one, otherwise `modes.default` of the config. Non-test paths, paths outside the repo, Read, Grep, Glob and Bash are not touched by rule 7. The tester and the advocate are not subject to rule 7. Why: only the tester writes tests while a gated mode is on. Bash writes are a known limitation of this rule.
 - **GR-14** The deny reason of rule 7 names the mode, `hard` when hard is among the modes and `feature` otherwise, and tells the executor to report the rule ID, the input and the observed value to the user when a test looks wrong. Why: an executor that cannot bend a test must escalate.
 
 ## Examples
@@ -201,6 +201,8 @@ Paths are judged relative to the repo (`repo` in the config, the project directo
 | GR-13 | MODE_hard | executor | Write | `test/a.ts` | deny 7 |
 | GR-13 | MODE_visual+feature | executor | Write | `test/a.ts` | deny 7 |
 | GR-13 | MODE_visual+hard | executor | Write | `test/a.ts` | deny 7 |
+| GR-13 | ROLES with `modes.default` `simple`, session file `sessions/<id>.json` `{"modes": ["feature"]}` written before the call | executor | Write | `test/a.ts` | deny 7 |
+| GR-13 | ROLES with `modes.default` `feature`, session file `{"modes": ["simple"]}` written before the call | executor | Write | `test/a.ts` | allow |
 | GR-13 | MODE_simple | executor | Write | `test/a.ts` | allow |
 | GR-13 | MODE_visual | executor | Write | `test/a.ts` | allow |
 | GR-13 | MODE_feature | executor | Write | `qa/suitesx/a.ts` | allow |

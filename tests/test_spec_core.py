@@ -578,6 +578,53 @@ class CombinedOutputTests(Base):
         self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "SessionStart")
         self.assertIn("specguard:guide", out["hookSpecificOutput"]["additionalContext"])
 
+    def test_CO_27_expansion_mode_switch_carries_expansion_event_name(self):
+        rows = (
+            ("feature", "specguard: mode feature, approval on"),
+            ("visual+feature", None),
+        )
+        for args, message in rows:
+            with self.subTest(args=args):
+                self.setUp()
+                self.build(cfg=OK_CONFIG)
+                payload = helpers.user_prompt_expansion("s1", "specguard:mode", args)
+                code, out, err = self.hook("UserPromptExpansion", payload)
+                self.assertEqual(code, 0)
+                self.assertEqual(err, "")
+                self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "UserPromptExpansion")
+                if message is not None:
+                    self.assertIn("additionalContext", out["hookSpecificOutput"])
+                    self.assertEqual(out["systemMessage"], message)
+
+    def test_CO_27_plain_prompt_context_carries_submit_event_name(self):
+        self.build(cfg=OK_CONFIG)
+        out = self.prompt("please continue")
+        self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit")
+
+    def test_CO_27_refusal_carries_pre_tool_use_event_name(self):
+        self.build(cfg={"version": 1, "hidden": {"segments": ["src"]}})
+        out = self.pre(agent_type="specguard:tester", tool="Read", tool_input={"file_path": "src/x.py"})
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "PreToolUse")
+
+    def test_CO_27_subagent_start_output_carries_its_own_event_name(self):
+        self.build(cfg=OK_CONFIG)
+        code, out, err = self.hook("SubagentStart", helpers.subagent_start("s1", "a1", "specguard:tester"))
+        self.assertEqual(code, 0)
+        self.assertEqual(err, "")
+        if out is not None:
+            self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "SubagentStart")
+
+    def test_CO_27_post_tool_use_output_carries_its_own_event_name(self):
+        self.build(cfg=OK_CONFIG)
+        self.prompt("go feature spec")
+        payload = helpers.post_tool_use("s1", "Read", {"file_path": "a.py"}, {"content": "x"})
+        code, out, err = self.hook("PostToolUse", payload)
+        self.assertEqual(code, 0)
+        self.assertEqual(err, "")
+        if out is not None and "hookSpecificOutput" in out:
+            self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "PostToolUse")
+
 
 FULL_CONFIG = {
     "version": 1,

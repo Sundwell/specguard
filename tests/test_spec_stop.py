@@ -60,6 +60,12 @@ class Env:
         if mtime is not None:
             os.utime(full, (mtime, mtime))
 
+    def age_all(self, seconds=3600):
+        past = time.time() - seconds
+        for root, dirs, names in os.walk(self.project_dir):
+            for name in names:
+                os.utime(os.path.join(root, name), (past, past))
+
     def stop(self, stop_hook_active=False, tasks=None, agent_type=None):
         payload = helpers.stop("s1", stop_hook_active=stop_hook_active,
                                background_tasks=tasks, agent_type=agent_type)
@@ -265,6 +271,7 @@ class StopSpecTests(unittest.TestCase):
                 env = self.env()
                 env.build(run=env.cmd(0), stop=dict(stop_over, fresh_globs=["*.py"]))
                 env.write("src/new.py")
+                env.age_all()
                 code, out, _ = env.stop()
                 self.assertIsNone(out)
                 self.assertEqual(env.count(), 1)

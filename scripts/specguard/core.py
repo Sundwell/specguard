@@ -231,4 +231,7 @@ def main(event, data, limited):
     dispatch = _DISPATCH.get(event)
     if dispatch is None:
         return None
-    return dispatch(ctx)
+    out = dispatch(ctx)
+    if out and isinstance(out.get("hookSpecificOutput"), dict):
+        out["hookSpecificOutput"]["hookEventName"] = event
+    return out
