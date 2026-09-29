@@ -1,0 +1,13 @@
+{
+  "name": "specguard",
+  "description": "Local marketplace listing the specguard plugin.",
+  "owner": {
+    "name": "Sundwell"
+  },
+  "plugins": [
+    {
+      "name": "specguard",
+      "source": "./"
+    }
+  ]
+}

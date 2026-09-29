@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "python3 -B \"${CLAUDE_PLUGIN_ROOT}/scripts/specguard_hook.py\"", "timeout": 5 } ] }
+    ],
+    "UserPromptExpansion": [
+      { "hooks": [ { "type": "command", "command": "python3 -B \"${CLAUDE_PLUGIN_ROOT}/scripts/specguard_hook.py\"", "timeout": 5 } ] }
+    ],
+    "SessionStart": [
+      { "matcher": "startup|resume|clear|compact", "hooks": [ { "type": "command", "command": "python3 -B \"${CLAUDE_PLUGIN_ROOT}/scripts/specguard_hook.py\"", "timeout": 5 } ] }
+    ],
+    "SubagentStart": [
+      { "hooks": [ { "type": "command", "command": "python3 -B \"${CLAUDE_PLUGIN_ROOT}/scripts/specguard_hook.py\"", "timeout": 5 } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Grep|Glob|Bash|Agent|SendMessage|CronCreate|ScheduleWakeup|AskUserQuestion|Skill", "hooks": [ { "type": "command", "command": "python3 -B \"${CLAUDE_PLUGIN_ROOT}/scripts/specguard_hook.py\"", "timeout": 10 } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "AskUserQuestion", "hooks": [ { "type": "command", "command": "python3 -B \"${CLAUDE_PLUGIN_ROOT}/scripts/specguard_hook.py\"", "timeout": 5 } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "python3 -B \"${CLAUDE_PLUGIN_ROOT}/scripts/specguard_hook.py\"", "timeout": 1860 } ] }
+    ]
+  }
+}

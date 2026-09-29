@@ -1,0 +1,8 @@
+{
+  "name": "specguard",
+  "version": "0.1.0",
+  "description": "Role guard, Stop test gate, per-session modes and mechanical spec approval for Claude Code projects.",
+  "author": {
+    "name": "Sundwell"
+  }
+}
