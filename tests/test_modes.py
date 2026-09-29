@@ -244,6 +244,23 @@ class ModeCommandTests(unittest.TestCase):
         self.assertEqual(session["modes"], ["feature"])
         self.assertFalse(session["approval"])
 
+    def test_switch_context_starts_with_intro_line(self):
+        sid = "feature-intro"
+        code, out, err = self._run_command("feature", session_id=sid)
+        self.assertEqual(code, 0, err)
+        text = out["hookSpecificOutput"]["additionalContext"]
+        self.assertTrue(text.startswith("This project runs the specguard plugin"))
+        self.assertIn("specguard:guide", text)
+        self.assertIn("Approval is", text)
+
+    def test_switch_to_simple_context_is_intro_line_only(self):
+        sid = "simple-intro"
+        code, out, err = self._run_command("simple", session_id=sid)
+        self.assertEqual(code, 0, err)
+        text = out["hookSpecificOutput"]["additionalContext"]
+        self.assertTrue(text.startswith("This project runs the specguard plugin"))
+        self.assertNotIn("Approval is", text)
+
     def test_model_cannot_switch_mode_by_bare_skill_tool(self):
         # disable-model-invocation is enforced by the harness before any hook
         # fires (Phase 0 C3); nothing in modes.py can be asked to simulate a

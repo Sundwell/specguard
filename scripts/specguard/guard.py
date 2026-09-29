@@ -116,6 +116,59 @@ _SETTINGS_BASH_RE = re.compile(
     r"(^|[^A-Za-z0-9_.-])(specguard\.json|settings\.local\.json|settings\.json)([^A-Za-z0-9_.-]|$)"
 )
 
+_READONLY_SPLIT_OPS = {";", "&&", "||", "|", "\n"}
+_READONLY_PROGRAMS = {"cat", "less", "head", "tail", "grep", "rg", "ls", "stat", "wc", "diff", "file"}
+_FIND_DENY_EXACT = {"-exec", "-execdir", "-delete", "-ok"}
+_GIT_READONLY_SUBCOMMANDS = {"status", "log", "diff", "show", "blame", "grep", "ls-files"}
+
+
+def _basename_word(text):
+    return text.rsplit("/", 1)[-1]
+
+
+def _group_is_readonly(words):
+    if not words:
+        return False
+    head = _basename_word(words[0])
+    rest = words[1:]
+
+    if head in _READONLY_PROGRAMS:
+        return True
+    if head == "jq":
+        return not any(w == "-i" for w in rest)
+    if head == "find":
+        return not any(w in _FIND_DENY_EXACT or w.startswith("-fprint") for w in rest)
+    if head == "git":
+        return bool(rest) and rest[0] in _GIT_READONLY_SUBCOMMANDS
+    return False
+
+
+def _bash_is_readonly(command):
+    if not command or not command.strip():
+        return False
+    tokens = paths.tokenize(command)
+    if tokens is None:
+        return False
+
+    for tok in tokens:
+        if tok.operator:
+            if tok.text not in _READONLY_SPLIT_OPS:
+                return False
+        elif not tok.quoted and (">" in tok.text or _basename_word(tok.text) == "tee"):
+            return False
+
+    groups = [[]]
+    for tok in tokens:
+        if tok.operator:
+            groups.append([])
+        else:
+            groups[-1].append(tok.text)
+    while groups and not groups[-1]:
+        groups.pop()
+    if not groups:
+        return False
+    return all(_group_is_readonly(g) for g in groups)
+
 
 def _rule_config(ctx):
     tool = ctx.tool_name
@@ -134,6 +187,8 @@ def _rule_config(ctx):
         return None
     if ctx.role in ("tester", "advocate"):
         return core.deny(ctx, "2", _CONFIG_DENY_REASON)
+    if tool == "Bash" and _bash_is_readonly(ti.get("command", "") or ""):
+        return None
     return core.ask(ctx, "2", _CONFIG_ASK_REASON)
 
 

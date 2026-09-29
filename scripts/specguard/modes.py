@@ -218,8 +218,9 @@ def _apply_switch(ctx, modes_set, optout, set_by):
         lines.append("specguard: no-approval refused, hard mode always requires approval")
 
     rules_text = context_mod.mode_rules(sorted(modes_set), approval)
+    ctx_body = context_mod.SESSION_INTRO if not rules_text else context_mod.SESSION_INTRO + "\n\n" + rules_text
     msg_out = core.message("\n".join(lines))
-    ctx_out = core.context("UserPromptSubmit", rules_text) if rules_text else None
+    ctx_out = core.context("UserPromptSubmit", ctx_body)
     return core.merge(msg_out, ctx_out), modes_set
 
 

@@ -4,6 +4,11 @@ from specguard import core
 
 MAX_CONTEXT_CHARS = 9000
 
+SESSION_INTRO = (
+    "This project runs the specguard plugin (role-separated TDD). For how it works, load the "
+    "specguard:guide skill; do not search the disk for it."
+)
+
 FEATURE_RULES = """Feature mode rules.
 - Write the spec with behaviour and rule IDs per the specs README before you touch code.
 - Bring in the devils-advocate only when the spec touches a money topic.
@@ -123,9 +128,8 @@ def on_session_start(ctx):
         return _role_context(ctx, "SessionStart")
     sess = ctx.session()
     text = mode_rules(sess["modes"], sess["approval"])
-    if not text:
-        return None
-    return core.context("SessionStart", text)
+    body = SESSION_INTRO if not text else SESSION_INTRO + "\n\n" + text
+    return core.context("SessionStart", body)
 
 
 def on_subagent_start(ctx):

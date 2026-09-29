@@ -112,6 +112,35 @@ class ContextTests(unittest.TestCase):
         self.assertIn("DESIGN | NOW", context.mode_rules(["visual"], True))
         self.assertIn("DESIGN | NOW", context.mode_rules(["visual", "hard"], True))
 
+    def test_session_start_intro_line_in_simple_mode(self):
+        ctx = _make_ctx(
+            self.project_dir,
+            self.state_home,
+            "SessionStart",
+            {"session_id": "s4"},
+            raw_config={"version": 1, "modes": {"default": "simple"}},
+        )
+        out = context.on_session_start(ctx)
+        self.assertIsNotNone(out)
+        text = out["hookSpecificOutput"]["additionalContext"]
+        self.assertTrue(text.startswith("This project runs the specguard plugin"))
+        self.assertIn("specguard:guide", text)
+        self.assertIn("do not search the disk for it", text)
+
+    def test_session_start_intro_line_precedes_mode_rules(self):
+        ctx = _make_ctx(
+            self.project_dir,
+            self.state_home,
+            "SessionStart",
+            {"session_id": "s5"},
+            raw_config={"version": 1, "modes": {"default": "feature"}},
+        )
+        out = context.on_session_start(ctx)
+        text = out["hookSpecificOutput"]["additionalContext"]
+        self.assertTrue(text.startswith("This project runs the specguard plugin"))
+        self.assertIn("Approval is", text)
+        self.assertLess(text.index("specguard:guide"), text.index("Approval is"))
+
 
 if __name__ == "__main__":
     unittest.main()

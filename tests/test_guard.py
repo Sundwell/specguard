@@ -201,10 +201,7 @@ class RuleTwoConfigTests(unittest.TestCase):
 
     def test_bash_naming_settings_asks_executor_denies_roles(self):
         commands = [
-            "cat .claude/specguard.json",
-            "cat .claude/settings.json",
             "rm .claude/settings.local.json",
-            "cat ~/.claude/settings.json",
         ]
         for command in commands:
             with self.subTest(command=command):
@@ -214,6 +211,39 @@ class RuleTwoConfigTests(unittest.TestCase):
                     self.project_dir, "Bash", {"command": command}, "tester", self.state_home
                 )
                 self.assertEqual(decision, "deny")
+
+    def test_readonly_bash_naming_settings_allowed_for_executor(self):
+        commands = [
+            "cat .claude/specguard.json",
+            "cat .claude/settings.json",
+            "cat ~/.claude/settings.json",
+            "grep -n specguard /home/sundwell/.claude/settings.json",
+            "cat .claude/specguard.json | jq .modes",
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                decision, _, err = _decision(self.project_dir, "Bash", {"command": command}, None, self.state_home)
+                self.assertIsNone(decision, "expected allow for {!r}, got {!r} ({})".format(command, decision, err))
+
+    def test_readonly_bash_naming_settings_still_denied_for_tester(self):
+        decision, _, _ = _decision(
+            self.project_dir, "Bash", {"command": "cat .claude/specguard.json"}, "tester", self.state_home
+        )
+        self.assertEqual(decision, "deny")
+
+    def test_write_forms_naming_settings_still_ask_for_executor(self):
+        commands = [
+            "echo x > .claude/settings.local.json",
+            "sed -i s/a/b/ .claude/specguard.json",
+            "tee .claude/settings.json",
+            "python3 -c \"open('.claude/settings.json','w')\"",
+            "cp x .claude/settings.local.json",
+            "find . -name settings.json -delete",
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                decision, _, err = _decision(self.project_dir, "Bash", {"command": command}, None, self.state_home)
+                self.assertEqual(decision, "ask", "expected ask for {!r}, got {!r} ({})".format(command, decision, err))
 
 
 class RuleThreeNoChildClaudeTests(unittest.TestCase):
@@ -307,6 +337,10 @@ class RuleFourLaunchTests(unittest.TestCase):
 
     def test_skill_other_allowed(self):
         decision, out, err = _decision(self.project_dir, "Skill", {"skill": "specguard:status"}, None, self.state_home)
+        self.assertIsNone(decision, err)
+
+    def test_skill_guide_allowed(self):
+        decision, out, err = _decision(self.project_dir, "Skill", {"skill": "specguard:guide"}, None, self.state_home)
         self.assertIsNone(decision, err)
 
 
