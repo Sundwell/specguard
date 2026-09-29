@@ -112,22 +112,23 @@ specguard has no runtime dependency on oh-my-claudecode, but the two can meet in
 
 ## 8. Install, update, rollback
 
-Install is per project, `--scope local`, from a local marketplace pointed at the plugin's own checkout.
+Install once for your user account. A project without `.claude/specguard.json` gets nothing from the plugin, every hook exits in about 20 ms with no output, so a project is switched on by its config alone.
 
 ```bash
 claude plugin marketplace add /path/to/specguard
-claude plugin install specguard@specguard --scope local
+claude plugin install specguard@specguard --scope user
 ```
 
-Because rule 3 refuses a child `claude` process inside a specguard project, run updates and any other `claude plugin ...` command from a terminal outside a specguard project, then restart open sessions in the project with `claude --continue`.
+Then open Claude Code in a project and ask it to set specguard up; the `specguard:guide` skill tells it to inspect the repo, draft `.claude/specguard.json` and write it only after your go. Restart the session with `claude --continue` so the rules load. A project that already has its own guard hooks needs them removed first, or both will gate the same calls.
 
-Rollback, from outside the project or from the user's own terminal, is meant to take under five minutes.
+Update from a terminal outside a specguard project (rule 3 refuses a child `claude` process inside one), then restart open sessions with `claude --continue`.
 
-1. Before switching a project onto specguard, tar its `.claude/` directory (and any project-specific agent notes it replaces) to a dated backup.
-2. `claude plugin uninstall specguard --scope local`.
-3. Restore the tar.
-4. Delete `.claude/specguard.json` and the `.claude/specguard/` notes directory.
-5. Restart open sessions in the project with `claude --continue`.
+```bash
+claude plugin marketplace update specguard
+claude plugin update specguard@specguard --scope user
+```
+
+Rollback of one project - delete `.claude/specguard.json` and `.claude/specguard/`, restore anything the switch replaced from its backup, restart open sessions. Rollback everywhere - `claude plugin uninstall specguard@specguard --scope user`. `--scope local` installs per project still work if you prefer them; do not combine them with the user install in the same project, or the hooks run twice.
 
 `python3 <plugin>/scripts/specguard_hook.py --status` prints, for the project in `CLAUDE_PROJECT_DIR` or the current directory, every recorded session with its modes, approval flag and open requests, the approved specs with their short hashes, the last green timestamp, the tail of the event log, whether the config validates, and the plugin's own tree hash. `--check-config` only validates `.claude/specguard.json` against the schema and prints `OK` or the list of problems.
 

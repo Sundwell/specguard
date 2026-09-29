@@ -92,7 +92,7 @@ Every one of your prompts already carries a line from specguard naming the sessi
 
 ## Setting up a project
 
-If there is no `.claude/specguard.json` yet, every specguard hook is silent and there is no session intro line, so this skill is the only place you see any of this. Installing the plugin itself is the user's own step, run from his terminal, not something you do - `claude plugin marketplace add <path>` then `claude plugin install specguard@specguard --scope local`. Your part starts after that.
+If there is no `.claude/specguard.json` yet, every specguard hook is silent and there is no session intro line, so this skill is the only place you see any of this. Installing the plugin itself is the user's own step, run from his terminal, not something you do - `claude plugin marketplace add <path>` then `claude plugin install specguard@specguard --scope user` (once per account; a per-project `--scope local` install also works). Your part starts after that.
 
 1. Inspect the repo. Find where the implementation code lives, the test folders and the test file naming pattern, the command that runs the tests, whether a specs folder already exists, and whether the code sits under a nested repo folder rather than the project root.
 2. Draft `.claude/specguard.json` from the real keys in `config.py`, keeping it to what this project actually needs. A typical minimal draft looks like this.
