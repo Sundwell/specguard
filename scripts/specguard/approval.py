@@ -51,19 +51,26 @@ def _classify_role(cfg, agent_type):
 # rule_messages - rule 4 message part and the AskUserQuestion structure check
 # ---------------------------------------------------------------------------
 
+def _strip_marks(normalized):
+    return re.sub(r"\s+", " ", re.sub(r"[.,!;:]", " ", normalized)).strip()
+
+
 def _text_has_mode_or_approval(ctx, text):
     if not text:
         return False
     if modes_mod.would_switch(text):
         return True
     normalized = modes_mod._normalize(text)
+    question = normalized.endswith("?")
+    normalized = _strip_marks(normalized)
     words = normalized.split()
-    if 1 <= len(words) <= 2:
+    if 1 <= len(words) <= 2 and not question:
         packs = modes_mod.load_packs()
-        approval_words = set()
-        for pack in packs.values():
-            approval_words.update(pack.get("approval_words", []))
-        if all(w in approval_words for w in words):
+        approval_words = _all_pack_words(packs, "approval_words")
+        single_excluded = _all_pack_words(packs, "approval_single_exclude")
+        if all(w in approval_words for w in words) and not (
+            len(words) == 1 and words[0] in single_excluded
+        ):
             return True
     for phrase in _all_pack_words(packs=None, key="optout"):
         if normalized == phrase or normalized.startswith(phrase + " "):
@@ -230,7 +237,7 @@ def _extract_spec_refs(ctx, text):
         rel = None
         for base in bases:
             info = paths.classify(ctx, tok, base)
-            if info.spec:
+            if info.spec and os.path.isfile(os.path.join(ctx.repo_dir, info.repo_rel)):
                 rel = info.repo_rel
                 break
         if rel is None and specs_dir and "/" not in tok:
@@ -588,7 +595,7 @@ def _try_text_approval(ctx, normalized):
             return None
         return core.message("specguard: nothing to approve, no request is open")
 
-    transcript_path = session.get("transcript_path") or ctx.data.get("transcript_path")
+    transcript_path = ctx.data.get("transcript_path") or session.get("transcript_path")
     last_text = _read_last_assistant_text(transcript_path)
     if last_text is None:
         if is_silent:
@@ -652,6 +659,9 @@ def on_prompt(ctx):
 
     normalized = modes_mod._normalize(prompt)
     if not normalized or normalized.endswith("?"):
+        return None
+    normalized = _strip_marks(normalized)
+    if not normalized:
         return None
 
     revoke_out = _try_revoke(ctx, normalized)
