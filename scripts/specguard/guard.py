@@ -117,13 +117,81 @@ _SETTINGS_BASH_RE = re.compile(
 )
 
 _READONLY_SPLIT_OPS = {";", "&&", "||", "|", "\n"}
-_READONLY_PROGRAMS = {"cat", "less", "head", "tail", "grep", "rg", "ls", "stat", "wc", "diff", "file"}
+_READONLY_PROGRAMS = {
+    "cat", "less", "head", "tail", "grep", "rg", "ls", "stat", "wc", "diff", "file",
+    "echo", "printf", "sort", "uniq", "cut", "tr", "pwd", "cd", "basename", "dirname",
+    "realpath", "readlink", "tree", "du", "true", "nl", "column", "comm", "md5sum", "sha256sum",
+}
 _FIND_DENY_EXACT = {"-exec", "-execdir", "-delete", "-ok"}
 _GIT_READONLY_SUBCOMMANDS = {"status", "log", "diff", "show", "blame", "grep", "ls-files"}
+
+_OUT_REDIR_RE = re.compile(r"^(\d*)(>{1,2})(.*)$")
+_DUP_TARGET_RE = re.compile(r"^\d+$")
+_SED_WRITE_RE = re.compile(r"(?:^|[;\n{])\s*[0-9]*\s*[wW](?:\s|$)|/[a-zA-Z]*[wW](?:\s|$)")
 
 
 def _basename_word(text):
     return text.rsplit("/", 1)[-1]
+
+
+def _redirection_target_safe(text):
+    return text == "/dev/null"
+
+
+def _strip_safe_redirections(tokens):
+    """Drop fd-dup (2>&1, >&2, 1>&2) and *>/dev/null redirections; a real write target is left in place."""
+    out = []
+    i, n = 0, len(tokens)
+    while i < n:
+        tok = tokens[i]
+
+        if tok.operator and tok.text == "&" and i + 1 < n:
+            nxt = tokens[i + 1]
+            if not nxt.operator and not nxt.quoted:
+                m = _OUT_REDIR_RE.match(nxt.text)
+                if m and not m.group(1) and _redirection_target_safe(m.group(3)):
+                    i += 2
+                    continue
+
+        if not tok.operator and not tok.quoted:
+            m = _OUT_REDIR_RE.match(tok.text)
+            if m:
+                rest = m.group(3)
+                if rest and _redirection_target_safe(rest):
+                    i += 1
+                    continue
+                if not rest and i + 1 < n:
+                    nxt = tokens[i + 1]
+                    if nxt.operator and nxt.text == "&" and i + 2 < n:
+                        tgt = tokens[i + 2]
+                        if not tgt.operator and _DUP_TARGET_RE.match(tgt.text):
+                            i += 3
+                            continue
+                    elif not nxt.operator and _redirection_target_safe(nxt.text):
+                        i += 2
+                        continue
+
+        out.append(tok)
+        i += 1
+    return out
+
+
+def _sed_word_is_inplace(word):
+    return word.startswith("-i") or word == "--in-place" or word.startswith("--in-place=")
+
+
+def _sed_word_has_n(word):
+    if word in ("-n", "--quiet", "--silent"):
+        return True
+    return word.startswith("-") and not word.startswith("--") and "n" in word[1:]
+
+
+def _sed_is_readonly(rest):
+    if any(_sed_word_is_inplace(w) for w in rest):
+        return False
+    if not any(_sed_word_has_n(w) for w in rest):
+        return False
+    return not any(_SED_WRITE_RE.search(w) for w in rest)
 
 
 def _group_is_readonly(words):
@@ -134,6 +202,8 @@ def _group_is_readonly(words):
 
     if head in _READONLY_PROGRAMS:
         return True
+    if head == "sed":
+        return _sed_is_readonly(rest)
     if head == "jq":
         return not any(w == "-i" for w in rest)
     if head == "find":
@@ -149,6 +219,7 @@ def _bash_is_readonly(command):
     tokens = paths.tokenize(command)
     if tokens is None:
         return False
+    tokens = _strip_safe_redirections(tokens)
 
     for tok in tokens:
         if tok.operator:
@@ -170,13 +241,68 @@ def _bash_is_readonly(command):
     return all(_group_is_readonly(g) for g in groups)
 
 
+def _shell_c_inner(group):
+    """If `group` (a list of tokens) invokes bash/sh/zsh -c '<command>', return that inner command text."""
+    words = [t.text for t in group]
+    i, n = 0, len(words)
+    while i < n:
+        w = words[i]
+        if _VAR_ASSIGN_RE.match(w):
+            i += 1
+            continue
+        if w == "timeout":
+            i += 1
+            if i < n:
+                i += 1
+            continue
+        if w in _PREFIX_WORDS:
+            i += 1
+            continue
+        break
+    if i >= n or _basename_word(words[i]) not in _SHELL_WORDS:
+        return None
+    if i + 1 < n and words[i + 1] == "-c" and i + 2 < n:
+        return group[i + 2].text
+    return None
+
+
+def _simple_commands(command):
+    """Split `command` into its simple commands on ; && || | newline, recursing into bash -c / sh -c strings."""
+    tokens = paths.tokenize(command)
+    if tokens is None:
+        return
+    tokens = _strip_safe_redirections(tokens)
+
+    groups = [[]]
+    for tok in tokens:
+        if tok.operator:
+            groups.append([])
+        else:
+            groups[-1].append(tok)
+    while groups and not groups[-1]:
+        groups.pop()
+
+    for group in groups:
+        if not group:
+            continue
+        inner = _shell_c_inner(group)
+        if inner is not None:
+            for sub in _simple_commands(inner):
+                yield sub
+            continue
+        yield " ".join(t.raw for t in group)
+
+
 def _rule_config(ctx):
     tool = ctx.tool_name
     ti = ctx.tool_input
 
     hit = False
+    hit_segments = []
     if tool == "Bash":
-        hit = bool(_SETTINGS_BASH_RE.search(ti.get("command", "") or ""))
+        command = ti.get("command", "") or ""
+        hit_segments = [seg for seg in _simple_commands(command) if _SETTINGS_BASH_RE.search(seg)]
+        hit = bool(hit_segments)
     elif tool in _WRITE_TOOLS:
         raw = _tool_path(ti)
         if raw:
@@ -187,7 +313,7 @@ def _rule_config(ctx):
         return None
     if ctx.role in ("tester", "advocate"):
         return core.deny(ctx, "2", _CONFIG_DENY_REASON)
-    if tool == "Bash" and _bash_is_readonly(ti.get("command", "") or ""):
+    if tool == "Bash" and all(_bash_is_readonly(seg) for seg in hit_segments):
         return None
     return core.ask(ctx, "2", _CONFIG_ASK_REASON)
 

@@ -11,6 +11,7 @@ sys.path.insert(0, _THIS_DIR)
 sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
 
 import helpers  # noqa: E402
+from specguard import guard  # noqa: E402
 
 PARFUME_CONFIG = {
     "version": 1,
@@ -175,6 +176,35 @@ class RuleTwoConfigTests(unittest.TestCase):
         shutil.rmtree(cls.state_home, ignore_errors=True)
         shutil.rmtree(cls.fake_home, ignore_errors=True)
 
+    READONLY_REDIRECT_COMMANDS = [
+        "cat .claude/settings.json 2>/dev/null | sort | uniq",
+        "sed -n 1,5p .claude/specguard.json",
+        "python3 fix.py && cat .claude/settings.json",
+        "head -80 docs/СОСТОЯНИЕ.md; "
+        "python3 shared/check-docs.py 2>&1 | tail -5; "
+        "grep -rli \"админк\" docs .claude/specguard.json sample-shops/docs 2>/dev/null | head -20; "
+        "cat .claude/specguard.json | head -40",
+    ]
+
+    NOT_READONLY_REDIRECT_COMMANDS = [
+        "git diff .claude/settings.json > /tmp/x",
+        "sed -n 'w out' .claude/specguard.json",
+        "awk '{print}' .claude/settings.json",
+        "cat .claude/settings.json | python3 -c \"open('.claude/settings.json','w')\"",
+    ]
+
+    def test_readonly_redirects_allowed_for_executor(self):
+        for command in self.READONLY_REDIRECT_COMMANDS:
+            with self.subTest(command=command):
+                decision, _, err = _decision(self.project_dir, "Bash", {"command": command}, None, self.state_home)
+                self.assertIsNone(decision, "expected allow for {!r}, got {!r} ({})".format(command, decision, err))
+
+    def test_unsafe_redirects_still_ask_for_executor(self):
+        for command in self.NOT_READONLY_REDIRECT_COMMANDS:
+            with self.subTest(command=command):
+                decision, _, err = _decision(self.project_dir, "Bash", {"command": command}, None, self.state_home)
+                self.assertEqual(decision, "ask", "expected ask for {!r}, got {!r} ({})".format(command, decision, err))
+
     FILES = [
         lambda self: os.path.join(self.project_dir, ".claude", "specguard.json"),
         lambda self: os.path.join(self.project_dir, ".claude", "settings.json"),
@@ -244,6 +274,38 @@ class RuleTwoConfigTests(unittest.TestCase):
             with self.subTest(command=command):
                 decision, _, err = _decision(self.project_dir, "Bash", {"command": command}, None, self.state_home)
                 self.assertEqual(decision, "ask", "expected ask for {!r}, got {!r} ({})".format(command, decision, err))
+
+
+class BashIsReadonlyTests(unittest.TestCase):
+    """Direct checks on the redirection-aware read-only detector used by rule 2."""
+
+    READONLY_COMMANDS = [
+        "ls sample-shops sample-shops/docs/specs 2>&1 | head -40; echo ---; "
+        "git diff .claude/settings.json | head -60; echo ---; "
+        "find . -path ./sample-shops -prune -o -path ./node_modules -prune -o "
+        "\\( -name '*.test.*' -o -name '*.spec.*' \\) -print 2>/dev/null | grep -v node_modules | head -30",
+        "cat .claude/settings.json 2>/dev/null | sort | uniq",
+        "sed -n 1,5p .claude/specguard.json",
+    ]
+
+    NOT_READONLY_COMMANDS = [
+        "git diff .claude/settings.json > /tmp/x",
+        "echo x > .claude/settings.local.json",
+        "sed -i s/a/b/ .claude/specguard.json",
+        "sed -n 'w out' .claude/specguard.json",
+        "ls .claude 2>&1 >/tmp/log",
+        "awk '{print}' .claude/settings.json",
+    ]
+
+    def test_readonly_commands(self):
+        for command in self.READONLY_COMMANDS:
+            with self.subTest(command=command):
+                self.assertTrue(guard._bash_is_readonly(command), command)
+
+    def test_not_readonly_commands(self):
+        for command in self.NOT_READONLY_COMMANDS:
+            with self.subTest(command=command):
+                self.assertFalse(guard._bash_is_readonly(command), command)
 
 
 class RuleThreeNoChildClaudeTests(unittest.TestCase):
