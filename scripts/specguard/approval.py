@@ -82,6 +82,24 @@ def _all_pack_words(packs, key):
     return words
 
 
+def _check_option_structure(ctx, q):
+    options = q.get("options") or []
+    checked = [o for o in options if "✓" in (o.get("label") or "")]
+    if len(checked) != 1:
+        return core.deny(
+            ctx,
+            "4msg",
+            "specguard: the approval question must carry exactly one option marked with ✓.",
+        )
+    if len(options) < 2:
+        return core.deny(
+            ctx,
+            "4msg",
+            "specguard: the approval question needs at least one option besides ✓.",
+        )
+    return None
+
+
 def _check_ask_user_question(ctx):
     tool_input = ctx.tool_input or {}
     if "answers" in tool_input:
@@ -91,37 +109,45 @@ def _check_ask_user_question(ctx):
     questions = tool_input.get("questions") or []
     session = ctx.session()
     requests = session.get("requests") or {}
-    if not requests:
-        return None
     markers = {_marker(spec, entry["sha256"]) for spec, entry in requests.items()}
+    visual_pending = (session.get("visual") or {}).get("pending")
+    visual_marker = "specguard-approve visual@{}".format(visual_pending) if visual_pending is not None else None
+
     for q in questions:
         text = q.get("question") or ""
         mentioned = {m for m in markers if m in text}
-        if not mentioned:
+        mentioned_visual = bool(visual_marker and visual_marker in text)
+        mode_marker = modes_mod.parse_mode_marker(text)
+
+        kinds_present = sum([bool(mentioned), mentioned_visual, mode_marker is not None])
+        if kinds_present == 0:
             continue
-        missing = markers - mentioned
-        if missing:
+        if kinds_present > 1:
             return core.deny(
                 ctx,
                 "4msg",
-                "specguard: the approval question must carry every open marker, missing {}.".format(
-                    ", ".join(sorted(missing))
-                ),
+                "specguard: the approval question may not mix a mode marker with a spec or visual marker.",
             )
-        options = q.get("options") or []
-        checked = [o for o in options if "✓" in (o.get("label") or "")]
-        if len(checked) != 1:
-            return core.deny(
-                ctx,
-                "4msg",
-                "specguard: the approval question must carry exactly one option marked with ✓.",
-            )
-        if len(options) < 2:
-            return core.deny(
-                ctx,
-                "4msg",
-                "specguard: the approval question needs at least one option besides ✓.",
-            )
+
+        if mode_marker is not None:
+            out = _check_option_structure(ctx, q)
+            if out is not None:
+                return out
+            continue
+
+        if mentioned:
+            missing = markers - mentioned
+            if missing:
+                return core.deny(
+                    ctx,
+                    "4msg",
+                    "specguard: the approval question must carry every open marker, missing {}.".format(
+                        ", ".join(sorted(missing))
+                    ),
+                )
+            out = _check_option_structure(ctx, q)
+            if out is not None:
+                return out
     return None
 
 

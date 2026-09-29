@@ -19,6 +19,7 @@ _END_TOKENS = {".", ",", "!", ":", ";", "-"}
 _DASHES = ("‐", "‑", "–", "—")
 _PUNCT_RE = re.compile(r"([.,!:;?+\-])")
 _LETTER_JOIN_RE = re.compile(r"(?<=[^\W\d_])-(?=[^\W\d_])", re.UNICODE)
+_MODE_MARKER_RE = re.compile(r"specguard-mode ([a-z]+(?:\+[a-z]+)*)( no-approval)?")
 
 _packs_cache = None
 
@@ -172,6 +173,23 @@ def _accepted_list_text():
     return ", ".join(_format_modes(s) for s in _ACCEPTED_SETS)
 
 
+def marker_text(modes_set, optout=False):
+    text = "specguard-mode {}".format(_format_modes(modes_set))
+    if optout:
+        text += " no-approval"
+    return text
+
+
+def parse_mode_marker(text):
+    if not text:
+        return None
+    match = _MODE_MARKER_RE.search(text)
+    if not match:
+        return None
+    modes_set = frozenset(match.group(1).split("+"))
+    return {"modes": modes_set, "optout": bool(match.group(2))}
+
+
 def would_switch(text):
     normalized = _normalize(text)
     if normalized.endswith("?"):
@@ -193,7 +211,7 @@ def _save(ctx, modes_set, approval, set_by):
     ctx.save_session(update)
 
 
-def _apply_switch(ctx, modes_set, optout, set_by):
+def _apply_switch_core(ctx, modes_set, optout, set_by):
     hard_refused = "hard" in modes_set and optout
     if hard_refused:
         approval = True
@@ -210,18 +228,44 @@ def _apply_switch(ctx, modes_set, optout, set_by):
         modes=sorted(modes_set),
         via=set_by,
     )
+    return hard_refused, approval
 
-    lines = [
-        "specguard: mode {}, approval {}".format(_format_modes(modes_set), "on" if approval else "off")
-    ]
+
+def _switch_message_lines(modes_set, approval, hard_refused, confirmed):
+    if confirmed:
+        lines = ["specguard: mode {} (confirmed by you)".format(_format_modes(modes_set))]
+    else:
+        lines = [
+            "specguard: mode {}, approval {}".format(_format_modes(modes_set), "on" if approval else "off")
+        ]
     if hard_refused:
         lines.append("specguard: no-approval refused, hard mode always requires approval")
+    return lines
 
+
+def _switch_context_output(modes_set, approval):
     rules_text = context_mod.mode_rules(sorted(modes_set), approval)
-    ctx_body = context_mod.SESSION_INTRO if not rules_text else context_mod.SESSION_INTRO + "\n\n" + rules_text
+    ctx_body = context_mod.SESSION_INTRO + "\n\n" + context_mod.MODE_CONFIRM_RULE
+    if rules_text:
+        ctx_body += "\n\n" + rules_text
+    return core.context("UserPromptSubmit", ctx_body)
+
+
+def _apply_switch(ctx, modes_set, optout, set_by):
+    hard_refused, approval = _apply_switch_core(ctx, modes_set, optout, set_by)
+    lines = _switch_message_lines(modes_set, approval, hard_refused, confirmed=False)
     msg_out = core.message("\n".join(lines))
-    ctx_out = core.context("UserPromptSubmit", ctx_body)
+    ctx_out = _switch_context_output(modes_set, approval)
     return core.merge(msg_out, ctx_out), modes_set
+
+
+def apply_confirmed_switch(ctx, modes_set, optout, set_by, with_context=False):
+    hard_refused, approval = _apply_switch_core(ctx, modes_set, optout, set_by)
+    lines = _switch_message_lines(modes_set, approval, hard_refused, confirmed=True)
+    msg_out = core.message("\n".join(lines))
+    if with_context:
+        return core.merge(msg_out, _switch_context_output(modes_set, approval))
+    return msg_out
 
 
 def _reject(text):
@@ -293,3 +337,90 @@ def on_command(ctx):
         return _reject(usage)
 
     return _apply_switch(ctx, modes_set, optout, "command")
+
+
+# ---------------------------------------------------------------------------
+# Mode switch by the user's confirmation - AskUserQuestion and text fallback
+# ---------------------------------------------------------------------------
+
+def _invalid_marker_message(modes_set):
+    return core.message(
+        "specguard: mode not switched, {} is not a valid combination; accepted are {}".format(
+            _format_modes(modes_set), _accepted_list_text()
+        )
+    )
+
+
+def post_tool_use(ctx):
+    if ctx.tool_name != "AskUserQuestion":
+        return None
+    tool_input = ctx.tool_input or {}
+    tool_response = ctx.data.get("tool_response") or {}
+    answers = tool_input.get("answers") or tool_response.get("answers") or {}
+    questions = tool_input.get("questions") or tool_response.get("questions") or []
+    if not answers:
+        return None
+
+    for q in questions:
+        text = q.get("question") or ""
+        parsed = parse_mode_marker(text)
+        if parsed is None:
+            continue
+        chosen_label = answers.get(text)
+        if chosen_label is None:
+            continue
+        options = q.get("options") or []
+        check_option = next((o for o in options if "✓" in (o.get("label") or "")), None)
+        is_check = check_option is not None and chosen_label == check_option.get("label")
+        if not is_check:
+            ctx.state.log("mode-unchanged", sid=ctx.session_id, role=ctx.role, via="ask")
+            return core.message("specguard: mode unchanged")
+
+        modes_set = parsed["modes"]
+        if modes_set not in _ACCEPTED_SETS:
+            return _invalid_marker_message(modes_set)
+        return apply_confirmed_switch(ctx, modes_set, parsed["optout"], "ask")
+    return None
+
+
+def _confirm_word_tuples(packs):
+    return set(_candidates(packs, "approval_words")) | set(_candidates(packs, "mode_confirm_words"))
+
+
+def on_text_confirm(ctx):
+    if ctx.role != "executor":
+        return None
+    prompt = ctx.data.get("prompt")
+    if not isinstance(prompt, str):
+        return None
+    stripped = prompt.strip()
+    if not stripped or stripped.startswith("<"):
+        return None
+
+    normalized = _normalize(prompt)
+    if not normalized:
+        return None
+    words = normalized.split()
+    if not (1 <= len(words) <= 2):
+        return None
+
+    packs = load_packs()
+    if tuple(words) not in _confirm_word_tuples(packs):
+        return None
+
+    session = ctx.session()
+    transcript_path = session.get("transcript_path") or ctx.data.get("transcript_path")
+    from specguard import approval as approval_mod
+
+    last_text = approval_mod._read_last_assistant_text(transcript_path)
+    if not last_text:
+        return None
+
+    parsed = parse_mode_marker(last_text)
+    if parsed is None:
+        return None
+
+    modes_set = parsed["modes"]
+    if modes_set not in _ACCEPTED_SETS:
+        return _invalid_marker_message(modes_set)
+    return apply_confirmed_switch(ctx, modes_set, parsed["optout"], "text", with_context=True)

@@ -28,6 +28,8 @@ A voice phrase at the very start of a message is a convenience on top, recognise
 - Russian - `го фичспек`, `го хардмод`, `го визуал и фичспек`, `го фичспек без апрува`.
 - Ukrainian - `го фічспек`, `го хардмод`, `го візуал`, `го простий`, `без апруву`.
 
+A third way is by the user's confirmation, for a mode he asks for in his own words anywhere in a message, in any language. The agent asks with AskUserQuestion, the question carrying a `specguard-mode <set>` marker and exactly one option marked with a `✓`; without AskUserQuestion it asks in chat and ends the message with that marker line instead, and a short reply in the user's own approval words then confirms it. The same AskUserQuestion structure check applies to this marker, and a question may not mix it with a spec or visual marker.
+
 Every switch, by command or by phrase, prints a line starting with `specguard:`, for example `specguard: mode feature, approval on`. Every line the hook prints itself is in English regardless of the project's language; a deny reason goes to the agent, which is expected to talk to the user in the user's own language.
 
 ## 4. Spec approval

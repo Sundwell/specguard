@@ -11,5 +11,6 @@
   "optout": ["без апруву"],
   "approval_words": ["го", "так", "апрув", "схвалюю"],
   "approval_single_exclude": ["так"],
-  "revoke": ["відкликаю апрув"]
+  "revoke": ["відкликаю апрув"],
+  "mode_confirm_words": []
 }

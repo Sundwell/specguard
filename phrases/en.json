@@ -11,5 +11,6 @@
   "optout": ["no approval"],
   "approval_words": ["go", "yes", "approve", "approved", "ok", "okay"],
   "approval_single_exclude": ["yes"],
-  "revoke": ["revoke approval"]
+  "revoke": ["revoke approval"],
+  "mode_confirm_words": ["y", "+"]
 }

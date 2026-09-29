@@ -1,6 +1,6 @@
 ---
 name: guide
-description: "What specguard is and how it works in this project - the tester and devils-advocate agents, modes and how the user switches them, the spec approval flow, the Stop test gate, what to do when a specguard hook refuses a call, and how to set specguard up in a new project. Use when the user asks about specguard, its modes, approval or the tester, or when a tool call is refused with a specguard reason."
+description: "What specguard is and how it works in this project - the tester and devils-advocate agents, modes and how the user switches them, the spec approval flow, the Stop test gate, what to do when a specguard hook refuses a call, how to set specguard up in a new project, and how to check or adjust its config. Use when the user asks about specguard, its modes, approval, the tester or the config, before reviewing or changing `.claude/specguard.json`, or when a tool call is refused with a specguard reason."
 ---
 
 # specguard: role-separated TDD for this project
@@ -24,7 +24,7 @@ A session starts in `simple` mode unless the project sets another default. The a
 - `visual` - the first UI edit of the session under a configured UI path is denied until the user gives his go.
 - `visual+feature`, `visual+hard` - the visual gate on top of feature or hard.
 
-The user switches modes with `/specguard:mode <mode>[+<mode>] [no-approval]` or a phrase at the start of his message (English, Russian or Ukrainian, for example "go feature spec" or "го хардмод"). You cannot switch modes yourself - the mode-switch skill refuses a model-invoked call, and a PreToolUse rule denies it too. Do not try.
+The user switches modes with `/specguard:mode <mode>[+<mode>] [no-approval]`, a phrase at the start of his message (English, Russian or Ukrainian, for example "go feature spec" or "го хардмод"), or his own words for a mode anywhere in a message, confirmed with one click. When he asks for a mode in his own words, do not tell him to rephrase; ask with AskUserQuestion, the question carrying the marker `specguard-mode <set>`, exactly one option marked with a ✓ to switch and at least one other option to stay, and no pre-filled answers. Without AskUserQuestion, ask in chat instead and end your message with that marker line; a short reply in his own approval words, or a lone "да", "так", "yes", "y", "ok", "ок", "+", "го" and the like, then confirms it. A question carrying a mode marker may not also carry a spec or visual marker. You cannot switch modes yourself - the mode-switch skill refuses a model-invoked call, and a PreToolUse rule denies it too. Do not try.
 
 When you tell the user how to switch, quote only a phrase from this table or the command; any other wording, such as "го симпл", switches nothing.
 
@@ -46,7 +46,7 @@ When the user asks what to work in, or hands you a task without naming a mode, r
 - `hard` when a silent error would cost money or data and the change is risky, such as payments, orders, stock, prices, migrations or auth. The devils-advocate reviews every spec, approval cannot be turned off, and a manual mutation check closes it out. Example, changing how a discount is applied at checkout.
 - `visual` for UI work driven from a design, and `visual+feature` when that UI also carries logic worth a test. Example, `visual` for a restyled card, `visual+feature` for a new filter panel with its own state.
 
-When you are unsure between two modes, say which two and why in one line, then let the user pick, for example "`/specguard:mode feature` or `go hard mode` - I would lean feature unless this touches pricing."
+When you are unsure between two modes, say which two and why in one line, then let the user pick, for example "`/specguard:mode feature` or `go hard mode` - I would lean feature unless this touches pricing." A recommendation can end with the one-click question instead of just naming the command or phrase - ask with AskUserQuestion carrying `specguard-mode <set>` for the mode you lean toward, one option marked with a ✓ to switch and at least one other to stay, so he can confirm on the spot.
 
 ## The approval flow, step by step
 
@@ -94,8 +94,8 @@ Every one of your prompts already carries a line from specguard naming the sessi
 
 If there is no `.claude/specguard.json` yet, every specguard hook is silent and there is no session intro line, so this skill is the only place you see any of this. Installing the plugin itself is the user's own step, run from his terminal, not something you do - `claude plugin marketplace add <path>` then `claude plugin install specguard@specguard --scope user` (once per account; a per-project `--scope local` install also works). Your part starts after that.
 
-1. Inspect the repo. Find where the implementation code lives, the test folders and the test file naming pattern, the command that runs the tests, whether a specs folder already exists, and whether the code sits under a nested repo folder rather than the project root.
-2. Draft `.claude/specguard.json` from the real keys in `config.py`, keeping it to what this project actually needs. A typical minimal draft looks like this.
+1. Inspect the repo from its own build and test configuration, never from folder-name conventions. Read what the stack uses - `package.json` and the test runner config, `*.sln` and `*.csproj`, `pom.xml` or `build.gradle`, `pyproject.toml` or `setup.cfg`, `Cargo.toml`, `go.mod`, or whatever this project has - and from it list three things. Where the non-test source lives, where the tests live and how test files are named, and which file extensions carry logic. Also find the command that runs the tests, whether a specs folder exists, and whether the code sits in a nested repo folder rather than the project root. The layouts differ a lot (a JS app may keep code in `src/` or in `app/` and `server/`, .NET keeps tests in separate `*.Tests` projects, Maven keeps both under `src/` as `src/main` and `src/test`), which is why the build files decide, not the names.
+2. Draft `.claude/specguard.json` from the real keys in `config.py`, keeping it to what this project actually needs. One rule covers every stack - every place with non-test source goes into `hidden`, every place with tests goes into `tests`, every logic file extension goes into `stop.dirty_pathspec` and `stop.fresh_globs`. Use `hidden.segments` only for a folder name that means implementation wherever it appears; when the same name also holds tests (Maven `src`), hide exact repo-relative folders with `hidden.paths` (`src/main`) and list the test folder in `tests.paths` (`src/test`). If tests sit in the same folders as the code (Go, colocated `*.test.ts`), folders cannot separate them; tell the user before writing anything that in this layout the tester either sees the code or cannot write its tests, and let him decide. The draft below only shows the shape for a TypeScript project with its code in `src/`; every folder, glob and command in it gets replaced by what step 1 found.
 
 ```json
 {
@@ -116,6 +116,21 @@ If there is no `.claude/specguard.json` yet, every specguard hook is silent and 
 }
 ```
 
-3. Show the draft to the user with one line of reasoning per key, for example why `repo` points at a nested folder, why `hidden.segments` names the implementation folder the tester should not read, why `stop.run` is the project's real test command. Write the file only after his go, never before it.
+3. Show the draft to the user with one line of reasoning per key, for example why `repo` points at a nested folder, why each implementation folder is in `hidden`, why each file type is in the Stop globs, why `stop.run` is the project's real test command. Write the file only after his go, never before it.
 4. Offer, as optional extras, a tester notes file and an advocate notes file under `.claude/specguard/` for project facts a generic role cannot know, and a specs folder with a short README if the project has none yet.
 5. After writing the config, tell the user to restart the session with `claude --continue` so the SessionStart rules load fresh.
+
+## Keeping the config right
+
+What the config covers. specguard guards one code repo, the folder named by `repo` (the project root when it is `.`). The keys `hidden.*`, `tests.*`, `tester_readable`, `specs_dir` and `docs_dirs` are relative to that repo; `notes`, `reports` and `plan_file` are relative to the project root. Code outside `repo` is out of scope by design, so when reviewing coverage do not list it as a gap; mention it once only if the user seems to expect specguard there.
+
+How to check coverage. Inside `repo`, list the folders that hold implementation code and the file types that carry logic (step 1 of setup above), then compare. Every implementation folder must be matched by `hidden`, every logic file type must be in `stop.dirty_pathspec` and `stop.fresh_globs`, every test folder must be matched by `tests`. Report each mismatch with what it lets through.
+
+The config is written once and then kept in step with the project; you are the one who notices when it drifts. Check it when one of these happens.
+
+- You are about to write implementation code in a folder that `hidden` does not cover, or a new app or package appears. Until it is hidden, the tester can read that implementation.
+- The logic you are changing lives in a file type that `stop.dirty_pathspec` and `stop.fresh_globs` do not list, for example `.vue` when they list only `*.ts`. Then the tests will not run when your turn ends.
+- Tests for the area land in a folder that `tests` does not list, so the executor test lock does not cover it.
+- The tester or the advocate is refused a file it legitimately needs, such as a shared test helper inside a hidden folder. Propose `tester_readable` for that one file, never unhiding the whole folder.
+
+When you see a gap, tell the user in one or two lines what it lets through and show the exact change to `.claude/specguard.json` as a diff. Edit only after his go; the edit raises a confirmation prompt from rule 2 by design. Hooks read the config on every call, so the change applies from the next tool call without a restart.

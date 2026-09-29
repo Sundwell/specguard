@@ -156,9 +156,9 @@ def _pre_tool_use(ctx):
 
 
 def _post_tool_use(ctx):
-    from specguard import approval, visual
+    from specguard import approval, modes, visual
 
-    return merge(approval.post_tool_use(ctx), visual.post_tool_use(ctx))
+    return merge(approval.post_tool_use(ctx), visual.post_tool_use(ctx), modes.post_tool_use(ctx))
 
 
 def _user_prompt_submit(ctx):
@@ -169,6 +169,7 @@ def _user_prompt_submit(ctx):
     outs = [out]
     if switched_to is not None:
         outs.append(visual.on_mode_switch(ctx, switched_to))
+    outs.append(modes.on_text_confirm(ctx))
     outs.append(approval.on_prompt(ctx))
     outs.append(visual.on_prompt(ctx))
     outs.append(context_mod.prompt_line(ctx))

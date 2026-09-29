@@ -9,6 +9,13 @@ SESSION_INTRO = (
     "specguard:guide skill; do not search the disk for it."
 )
 
+MODE_CONFIRM_RULE = (
+    "If the user asks for a mode in his own words, do not ask him to rephrase. Ask with "
+    "AskUserQuestion carrying `specguard-mode <set>`, one ✓ option to switch and one to "
+    "stay; without AskUserQuestion ask in chat and end the message with that marker line. Do "
+    "not ask if his message already switched the mode (see the specguard line on his prompt)."
+)
+
 FEATURE_RULES = """Feature mode rules.
 - Write the spec with behaviour and rule IDs per the specs README before you touch code.
 - Bring in the devils-advocate only when the spec touches a money topic.
@@ -128,7 +135,9 @@ def on_session_start(ctx):
         return _role_context(ctx, "SessionStart")
     sess = ctx.session()
     text = mode_rules(sess["modes"], sess["approval"])
-    body = SESSION_INTRO if not text else SESSION_INTRO + "\n\n" + text
+    body = SESSION_INTRO + "\n\n" + MODE_CONFIRM_RULE
+    if text:
+        body += "\n\n" + text
     return core.context("SessionStart", body)
 
 
