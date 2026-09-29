@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "repo": ".",
+  "hidden": { "paths": ["scripts"] },
+  "tests": { "paths": ["tests"], "file_regex": "(^|/)test_[^/]*\\.py$" },
+  "docs_dirs": ["docs"],
+  "specs_dir": "docs/specs",
+  "modes": { "default": "feature", "approval_default": false },
+  "stop": {
+    "dirty_pathspec": ["scripts", "tests", "phrases"],
+    "fresh_paths": ["scripts", "phrases"],
+    "fresh_globs": ["*.py", "*.json"],
+    "exclude_dirs": [".git", "__pycache__", ".omc"],
+    "run": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests",
+    "timeout": 300
+  }
+}
