@@ -275,6 +275,43 @@ class RuleTwoConfigTests(unittest.TestCase):
                 decision, _, err = _decision(self.project_dir, "Bash", {"command": command}, None, self.state_home)
                 self.assertEqual(decision, "ask", "expected ask for {!r}, got {!r} ({})".format(command, decision, err))
 
+    NOTE_HEREDOC = (
+        "mkdir -p /p/.omc/now && cat > /p/.omc/outbox.md <<'EOF'\nprose\nEOF\n"
+        "cat > /p/.omc/now/0053.md <<'EOF'\n# t\n- [x] Config specguard `.claude/specguard.json`, simple\nEOF\necho done"
+    )
+
+    def test_heredoc_data_mentioning_config_does_not_ask(self):
+        commands = [
+            self.NOTE_HEREDOC,
+            "cat > note.md <<-'EOF'\n\tsee settings.json\n\tEOF\necho ok",
+            "cat > note.md <<\"END\"\nsettings.local.json\nEND",
+            "cat <<EOF > note.md\nspecguard.json\nEOF",
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                decision, _, err = _decision(self.project_dir, "Bash", {"command": command}, None, self.state_home)
+                self.assertIsNone(decision, "expected allow for {!r}, got {!r} ({})".format(command, decision, err))
+
+    def test_heredoc_with_real_config_target_still_asks(self):
+        commands = [
+            "cat <<'EOF' > .claude/settings.json\n{}\nEOF",
+            "tee .claude/specguard.json <<'EOF'\n{}\nEOF",
+            "python3 - <<'EOF'\nopen('/home/u/.claude/settings.json', 'w').write('{}')\nEOF",
+            "bash <<'EOF'\necho {} > .claude/settings.json\nEOF",
+            "cat <<'A' > note.md\nhi\nA\ncat <<'B' >> .claude/specguard.json\n{}\nB",
+            "cat <<EOF\n$(rm .claude/settings.json)\nEOF",
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                decision, _, err = _decision(self.project_dir, "Bash", {"command": command}, None, self.state_home)
+                self.assertEqual(decision, "ask", "expected ask for {!r}, got {!r} ({})".format(command, decision, err))
+
+    def test_heredoc_data_still_denied_for_roles_when_target_is_config(self):
+        decision, _, _ = _decision(
+            self.project_dir, "Bash", {"command": "cat <<'EOF' > .claude/settings.json\n{}\nEOF"}, "tester", self.state_home
+        )
+        self.assertEqual(decision, "deny")
+
 
 class BashIsReadonlyTests(unittest.TestCase):
     """Direct checks on the redirection-aware read-only detector used by rule 2."""

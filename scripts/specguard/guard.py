@@ -116,6 +116,13 @@ _SETTINGS_BASH_RE = re.compile(
     r"(^|[^A-Za-z0-9_.-])(specguard\.json|settings\.local\.json|settings\.json)([^A-Za-z0-9_.-]|$)"
 )
 
+_HEREDOC_RE = re.compile(r"(?<!<)<<(?!<)-?[ \t]*(['\"]?)([A-Za-z0-9_.-]+)\1")
+_HEREDOC_SINKS = {"cat", "tee"}
+_CODE_WORD_RE = re.compile(
+    r"(^|[^A-Za-z0-9_.-])(python[0-9.]*|node|nodejs|bash|sh|zsh|dash|ksh|fish|ruby|perl|php|lua|deno|bun|eval|source|exec|xargs)"
+    r"([^A-Za-z0-9_.-]|$)"
+)
+
 _READONLY_SPLIT_OPS = {";", "&&", "||", "|", "\n"}
 _READONLY_PROGRAMS = {
     "cat", "less", "head", "tail", "grep", "rg", "ls", "stat", "wc", "diff", "file",
@@ -294,6 +301,34 @@ def _simple_commands(command):
         yield " ".join(t.raw for t in group)
 
 
+def _strip_data_heredocs(command):
+    """Drop the body of heredocs fed to cat or tee; a body an interpreter may run stays in the scanned text."""
+    lines = command.split("\n")
+    out = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(line)
+        i += 1
+        m = _HEREDOC_RE.search(line)
+        if not m or line[:m.start()].count("'") % 2 or line[:m.start()].count('"') % 2:
+            continue
+        segment = re.split(r"[;&|]", line[:m.start()])[-1].split()
+        while segment and _VAR_ASSIGN_RE.match(segment[0]):
+            segment.pop(0)
+        if not segment or _basename_word(segment[0]) not in _HEREDOC_SINKS or _CODE_WORD_RE.search(line):
+            continue
+        end = i
+        while end < len(lines) and lines[end].lstrip("\t") != m.group(2):
+            end += 1
+        if not m.group(1) and any("$(" in b or "`" in b for b in lines[i:end]):
+            continue
+        i = end + 1 if end < len(lines) else end
+        if end < len(lines):
+            out.append(lines[end])
+    return "\n".join(out)
+
+
 def _rule_config(ctx):
     tool = ctx.tool_name
     ti = ctx.tool_input
@@ -301,7 +336,7 @@ def _rule_config(ctx):
     hit = False
     hit_segments = []
     if tool == "Bash":
-        command = ti.get("command", "") or ""
+        command = _strip_data_heredocs(ti.get("command", "") or "")
         hit_segments = [seg for seg in _simple_commands(command) if _SETTINGS_BASH_RE.search(seg)]
         hit = bool(hit_segments)
     elif tool in _WRITE_TOOLS:
