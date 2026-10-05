@@ -2,6 +2,8 @@
 
 A Claude Code plugin for role-separated TDD. A blind `specguard:tester` subagent writes tests from a spec without reading the implementation, the executor may not write tests itself while a gated mode is on, a spec needs the user's approval before a tester can run on it, a Stop hook gates the executor's exit on a green test run, and every session picks its own mode. specguard has no runtime dependency on any other plugin and reads its own config, `.claude/specguard.json`, per project.
 
+Install it with `/plugin install specguard --marketplace Sundwell/specguard` inside a Claude Code session, then ask Claude to set specguard up in your project. Section 8 has the requirements and the details.
+
 ## 1. What it is
 
 specguard reproduces the role-guard-plus-Stop-gate setup that came out of hand-rolled per-project hooks, as a proper plugin with per-session modes and a mechanical approval step on top. The tester agent (`specguard:tester`, sonnet) only reads the spec, existing tests and, when configured, a generated API report, then writes tests against the named "Public API"; a hook denies it any Read, Edit, Write, Grep, Glob or Bash reach into the paths the project config marks hidden. The devils-advocate agent (`specguard:devils-advocate`, opus) reviews a draft spec before the user sees it and is read-only except for its own report file. The executor writes the implementation and, in feature and hard mode, may not touch files under the configured test paths, a spec must be approved (unchanged since HEAD, or explicitly approved) before the executor can launch a tester on it, and the Stop hook runs the project's test command and blocks a red exit once. Without a `.claude/specguard.json` in the project the plugin does nothing at all, every hook event exits with no output. Every session start also gets a one-line pointer to the model-invocable `specguard:guide` skill, which is where an agent that does not know the plugin should look, rather than searching the disk or the plugin cache for it; that same skill also covers which mode to recommend and how to draft the config for a project that has none yet.
@@ -112,11 +114,47 @@ specguard has no runtime dependency on oh-my-claudecode, but the two can meet in
 
 `omitClaudeMd: true` on the devils-advocate agent holds for it as a launched subagent, but the same setting does not hold for a top-level `claude --agent` session. Running `claude --version` or any `claude plugin ...` subcommand from an agent's Bash is refused inside a specguard project, since the no-child-claude rule matches on the command word `claude` itself, not on which subcommand follows it; use `python3 <plugin>/scripts/specguard_hook.py --status` from outside the project instead. On CLI 2.1.284 the Grep and Glob tools can be absent from a subagent's tool list entirely, in which case its searches go through Bash instead, where the same token-aware hidden-path scan applies to Bash commands. The devils-advocate has no Bash tool at all, so when Grep is also absent from its tool list it can only Read the paths it is explicitly given.
 
-## 8. Install, update, rollback
+specguard runs on macOS, Linux and WSL. Native Windows is not supported, the hooks call `python3` and take POSIX file locks. The visual mode's instructions to the agent still name a comparison helper from the author's own setup (`~/.claude/tools/compare.py`); until that becomes configurable, read it as building a side-by-side sheet, design on the left, with whatever tool you have.
 
-Install once for your user account. A project without `.claude/specguard.json` gets nothing from the plugin, every hook exits in about 20 ms with no output, so a project is switched on by its config alone.
+## 8. Install, update, uninstall
 
-Claude Code runs a plugin from a directory marketplace in place, so the marketplace points at a release folder, never at this repository; otherwise the guard would protect the repository as its own plugin root and every edit here would change the running guard at once. `tools/release.sh` publishes the committed plugin files to `~/.local/share/specguard-release` (tests must be green and the plugin folders clean) and updates the installed plugin.
+Requirements. Claude Code on macOS, Linux or WSL, with `python3` and `git` on the PATH. The hooks use only the Python standard library and are developed on Python 3.12. Native Windows is not supported, the hooks call `python3` and take POSIX file locks.
+
+Install once for your user account. In a Claude Code session on 2.1.275 or newer, one command adds the marketplace and opens the plugin for install.
+
+```text
+/plugin install specguard --marketplace Sundwell/specguard
+```
+
+From a shell, or on an older version, it takes two commands.
+
+```bash
+claude plugin marketplace add Sundwell/specguard
+claude plugin install specguard@specguard
+```
+
+A project without `.claude/specguard.json` gets nothing from the plugin, every hook exits in about 20 ms with no output, so a project is switched on by its config alone. Open Claude Code in the project and ask it to set specguard up; the `specguard:guide` skill tells it to inspect the repo, draft `.claude/specguard.json` and write it only after your go. Restart the session with `claude --continue` so the rules load. A project that already has its own guard hooks needs them removed first, or both will gate the same calls.
+
+Update. Claude Code does not auto-update a third-party marketplace unless you turn that on, in `/plugin` on the Marketplaces tab under `specguard`. To update by hand, run `claude plugin update specguard@specguard` from a shell, then restart open sessions with `claude --continue`. A new release always carries a new version number.
+
+For a team. To switch the plugin on for everyone who works in a repository, commit this to the repository's `.claude/settings.json`. Each collaborator still runs `claude plugin install specguard@specguard --scope project` once, because the entry enables the plugin but does not download it.
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "specguard": { "source": { "source": "github", "repo": "Sundwell/specguard" } }
+  },
+  "enabledPlugins": { "specguard@specguard": true }
+}
+```
+
+Uninstall and rollback. Rollback of one project - delete `.claude/specguard.json` and `.claude/specguard/`, restore anything the switch replaced from its backup, restart open sessions. Rollback everywhere - `claude plugin uninstall specguard@specguard --scope user`. `--scope local` installs per project still work if you prefer them; do not combine them with the user install in the same project, or the hooks run twice.
+
+`python3 <plugin>/scripts/specguard_hook.py --status` prints, for the project in `CLAUDE_PROJECT_DIR` or the current directory, every recorded session with its modes, approval flag and open requests, the approved specs with their short hashes, the last green timestamp, the tail of the event log, whether the config validates, and the plugin's own tree hash. `--check-config` only validates `.claude/specguard.json` against the schema and prints `OK` or the list of problems.
+
+## 9. Development
+
+This part is for working on specguard itself. Claude Code runs a plugin from a directory marketplace in place, so on the author's machine the marketplace points at a release folder, never at this repository; otherwise the guard would protect the repository as its own plugin root and every edit here would change the running guard at once. `tools/release.sh` publishes the committed plugin files to `~/.local/share/specguard-release` (tests must be green and the plugin folders clean) and updates the installed plugin.
 
 ```bash
 tools/release.sh                                  # first run creates the release folder, the update step fails once
@@ -124,16 +162,14 @@ claude plugin marketplace add ~/.local/share/specguard-release
 claude plugin install specguard@specguard --scope user
 ```
 
-Then open Claude Code in a project and ask it to set specguard up; the `specguard:guide` skill tells it to inspect the repo, draft `.claude/specguard.json` and write it only after your go. Restart the session with `claude --continue` so the rules load. A project that already has its own guard hooks needs them removed first, or both will gate the same calls.
+Release - commit the change, raise `version` in `.claude-plugin/plugin.json` as the last commit, run `tools/release.sh` from a terminal (inside a specguard session rule 3 refuses a direct `claude` call), push, then restart open sessions with `claude --continue`. Claude Code keeps everyone who installed from GitHub on the version string they have until it changes, so `tools/release.sh` refuses to run when plugin files changed after the last version bump.
 
-Update - commit, then run `tools/release.sh` from a terminal (inside a specguard session rule 3 refuses a direct `claude` call), then restart open sessions with `claude --continue`.
-
-Rollback of one project - delete `.claude/specguard.json` and `.claude/specguard/`, restore anything the switch replaced from its backup, restart open sessions. Rollback everywhere - `claude plugin uninstall specguard@specguard --scope user`. `--scope local` installs per project still work if you prefer them; do not combine them with the user install in the same project, or the hooks run twice.
-
-`python3 <plugin>/scripts/specguard_hook.py --status` prints, for the project in `CLAUDE_PROJECT_DIR` or the current directory, every recorded session with its modes, approval flag and open requests, the approved specs with their short hashes, the last green timestamp, the tail of the event log, whether the config validates, and the plugin's own tree hash. `--check-config` only validates `.claude/specguard.json` against the schema and prints `OK` or the list of problems.
-
-## 9. Tests
+Tests.
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
+
+## 10. License
+
+MIT, see `LICENSE`.
