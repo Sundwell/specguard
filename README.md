@@ -20,6 +20,8 @@ A session mode lives outside any repo, in specguard's own state directory, and s
 | visual | Only the UI edit gate, the first executor edit under a path listed in `visual.ui_paths` each session is denied until the user gives his go; it carries no test lock or approval gate of its own. |
 | visual+feature, visual+hard | The visual gate on top of everything feature or hard enforces. |
 
+The plugin also ships `compare-sheet`, a small `ffmpeg` wrapper that glues screenshots into one side-by-side sheet with a label over each column, `compare-sheet <out.png> DESIGN:<path> NOW:<path>`. The visual mode tells the agent to build its DESIGN | NOW sheet with it. While the plugin is enabled the command is on the agent's PATH in every project, with or without a specguard config, so it works outside the visual mode too.
+
 ## 3. Switching modes
 
 The primary way is the command `/specguard:mode <mode>[+<mode>] [no-approval]`, for example `/specguard:mode visual+feature` or `/specguard:mode feature no-approval`. The skill that backs it sets `disable-model-invocation: true`, and a PreToolUse rule separately denies any `Skill` call naming `specguard:mode` or `mode`, so the model cannot run the switch on its own in either path. The command is read from the `UserPromptExpansion` event, not from the raw slash text.
@@ -114,11 +116,11 @@ specguard has no runtime dependency on oh-my-claudecode, but the two can meet in
 
 `omitClaudeMd: true` on the devils-advocate agent holds for it as a launched subagent, but the same setting does not hold for a top-level `claude --agent` session. Running `claude --version` or any `claude plugin ...` subcommand from an agent's Bash is refused inside a specguard project, since the no-child-claude rule matches on the command word `claude` itself, not on which subcommand follows it; use `python3 <plugin>/scripts/specguard_hook.py --status` from outside the project instead. On CLI 2.1.284 the Grep and Glob tools can be absent from a subagent's tool list entirely, in which case its searches go through Bash instead, where the same token-aware hidden-path scan applies to Bash commands. The devils-advocate has no Bash tool at all, so when Grep is also absent from its tool list it can only Read the paths it is explicitly given.
 
-specguard runs on macOS, Linux and WSL. Native Windows is not supported, the hooks call `python3` and take POSIX file locks. The visual mode's instructions to the agent still name a comparison helper from the author's own setup (`~/.claude/tools/compare.py`); until that becomes configurable, read it as building a side-by-side sheet, design on the left, with whatever tool you have.
+specguard runs on macOS, Linux and WSL. Native Windows is not supported, the hooks call `python3` and take POSIX file locks. The comparison sheet of the visual mode is built by `compare-sheet`, which needs `ffmpeg` on the PATH and one of the bold fonts it looks for (DejaVu on Linux, Arial on macOS, or any `.ttf` named in `COMPARE_SHEET_FONT`); the macOS font paths are untested.
 
 ## 8. Install, update, uninstall
 
-Requirements. Claude Code on macOS, Linux or WSL, with `python3` and `git` on the PATH. The hooks use only the Python standard library and are developed on Python 3.12. Native Windows is not supported, the hooks call `python3` and take POSIX file locks.
+Requirements. Claude Code on macOS, Linux or WSL, with `python3` and `git` on the PATH. The hooks use only the Python standard library and are developed on Python 3.12. `ffmpeg` is needed only for `compare-sheet`. Native Windows is not supported, the hooks call `python3` and take POSIX file locks.
 
 Install once for your user account. In a Claude Code session on 2.1.275 or newer, one command adds the marketplace and opens the plugin for install.
 
