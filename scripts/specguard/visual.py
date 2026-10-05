@@ -8,7 +8,7 @@ _WRITE_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 _DENY_REASON = (
     "specguard: visual mode - his go is needed before the first UI edit of the session. Walk the "
     "design frame by frame against what the build shows now and show him a DESIGN | NOW checklist "
-    "(python3 ~/.claude/tools/compare.py, design in the left column). Then ask with AskUserQuestion, "
+    "(compare-sheet, shipped with this plugin, design in the left column). Then ask with AskUserQuestion, "
     "the question carrying the marker {} and exactly one option marked with ✓, plus at least "
     "one other option. If you ask in plain text instead, end the message with the marker, or his "
     "reply will not count."

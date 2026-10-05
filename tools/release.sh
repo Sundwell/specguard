@@ -2,7 +2,7 @@
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 dest=${SPECGUARD_RELEASE_DIR:-$HOME/.local/share/specguard-release}
-parts=(.claude-plugin hooks scripts agents skills phrases)
+parts=(.claude-plugin hooks scripts agents skills phrases bin)
 cd "$repo"
 if [ -n "$(git status --porcelain -- "${parts[@]}")" ]; then
   echo "specguard release: plugin files have uncommitted changes, commit them first" >&2

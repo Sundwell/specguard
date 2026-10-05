@@ -33,7 +33,7 @@ Hard mode adds.
 - Before you report done, run a manual mutation check on every changed rule group: break at least three named things the rule group asserts, one at a time, name which test caught each break, then restore the code."""
 
 VISUAL_RULES = """Visual mode rules.
-- Before the first UI edit in a session, walk the design frame by frame against what the build shows now in a checklist (the frame, the current code, same or different, rows you plan to leave as is), the frames linked from ~/s. Build the sheet with python3 ~/.claude/tools/compare.py as DESIGN | NOW, the design always in the left column.
+- Before the first UI edit in a session, walk the design frame by frame against what the build shows now in a checklist (the frame, the current code, same or different, rows you plan to leave as is), each frame linked. Build the sheet with compare-sheet <out.png> DESIGN:<path> NOW:<path> (shipped with this plugin, needs ffmpeg) as DESIGN | NOW, the design always in the left column.
 - Wait for the user's go before editing.
 - Build.
 - When you show a change, build a DESIGN | BEFORE | NOW sheet the same way, the design still in the left column.

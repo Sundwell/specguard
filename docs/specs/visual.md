@@ -35,6 +35,7 @@ The marker is read from the first denial, never hard-coded, except for the numbe
 - **VG-11** The gate applies only to the executor. An edit sent with `agent_type` `specguard:tester` on a UI path is not denied with a visual marker, and `specguard:devils-advocate` is denied by its own read-only rule, not with a visual marker. The visual gate is not a role lock.
 - **VG-12** Sessions are independent. A go given in session `s1` does not open session `s2`, and each session numbers its markers from 1.
 - **VG-13** The log records the gate. A denial writes an event with `ev` `deny`, `rule` `V`. A go by click writes `ev` `approval`, `rule` `V`, `via` `ask`; a go by text writes the same with `via` `text`; a switch into visual writes `ev` `visual-close`, `rule` `V`. So a later reader can tell who opened and closed the gate.
+- **VG-14** The denial reason names the sheet command the plugin ships, `compare-sheet`, and has no `~/` in it. Other people install the plugin, so the reason may only point at tools that come with it, never at a path in the author's home.
 
 ## Examples
 
@@ -98,6 +99,7 @@ Project `app/button.tsx`, `app/a/b/c.vue`, `apps/x.tsx`, `application/x.tsx`, `s
 | VG-13 | deny, click `✓ Approve`, read log | lines `deny` with `rule` `V`, then `approval` with `rule` `V` and `via` `ask` |
 | VG-13 | deny, text approval, read log | `approval` with `via` `text` |
 | VG-13 | go given, switch `visual`, read log | a `visual-close` line with `rule` `V` |
+| VG-14 | first Edit of `app/button.tsx` in s1 | reason contains `compare-sheet` and no `~/` |
 
 ## Differences between the code and the intent
 

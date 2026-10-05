@@ -27,6 +27,7 @@ Tests drive the hook as a process through `tests/helpers.py`, never by importing
 - **CX-8** SubagentStart for a tester (`specguard:tester`, `tester`, or a name in `roles.tester`) or an advocate (`specguard:devils-advocate`, `devils-advocate`, or a name in `roles.advocate`), and SessionStart of a session whose `agent_type` is such a name, print the role context instead, with no intro and no mode rules. It is the project notes file, then a blank line, then a summary of nine lines in this order and with these prefixes. `Project root: ` (the absolute project directory), `Repo: ` (the config `repo`, default `.`), `Specs dir: ` (`specs_dir`), `Report dir: ` (`reports.tester` for a tester, `reports.advocate` for an advocate), `Allowed grep roots: ` (the `tests.paths` then `docs_dirs`, joined by `, `, for an advocate followed by the `tester_readable` files; `none configured` when the list is empty), `Hidden: ` (`hidden.segments`, `hidden.names`, `hidden.paths` in that order joined by `, `, or `none`), `Readable exceptions: ` (`tester_readable` joined by `, ` or `none`), `Hands-on tag: ` (`hands_on_tag`, default `[hands-on]`), `Test command: ` (`stop.run` or `none configured`). The notes file is `notes.tester` (default `.claude/specguard/tester-notes.md`) for a tester and `notes.advocate` (default `.claude/specguard/advocate-notes.md`) for an advocate, relative to the project root. `hookEventName` is the event that was sent. Why - a generic role cannot know the project's facts, the notes and the summary give them.
 - **CX-9** Length cap. When the notes, the blank line and the summary together are longer than 9,000 characters, the notes are left out, the text is the nine summary lines followed by a line `Read <notes path> first.` with the notes path as configured or defaulted, and none of the notes text appears. A notes file of 8,000 characters in a project with short paths is included whole and the text has no `Read ` line. Why - a huge notes file must not flood the agent, it can read it itself.
 - **CX-10** When the notes file is missing or empty, the text is the summary alone, with no `Read ... first.` line. Why - pointing the agent at a file that is not there is noise.
+- **CX-11** For a mode set containing `visual`, the SessionStart text names the sheet command the plugin ships, `compare-sheet`, and has no `~/` anywhere in it when the project has no notes files. Why - other people install the plugin, so its instructions may only point at tools that come with it, never at a path in the author's home.
 
 ## Examples
 
@@ -72,6 +73,8 @@ Tests drive the hook as a process through `tests/helpers.py`, never by importing
 | CX-9 | notes of 8,000 characters | included whole, no `Read ` line |
 | CX-10 | no notes file | text starts `Project root:`, no `Read ` line |
 | CX-10 | empty notes file | same |
+| CX-11 | default `visual`, SessionStart | contains `compare-sheet`, no `~/` |
+| CX-11 | default `feature`, then the expansion `visual+feature`, SessionStart `source` `resume` | contains `compare-sheet`, no `~/` |
 
 ## Retired rules
 

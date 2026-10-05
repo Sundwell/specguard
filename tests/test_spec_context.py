@@ -408,5 +408,20 @@ class TestCX10MissingNotes(Base):
                 self.assertNotIn("Read ", t)
 
 
+class TestCX11SheetCommand(Base):
+    def assert_sheet_command(self, text):
+        self.assertIn("compare-sheet", text)
+        self.assertNotIn("~/", text)
+
+    def test_CX_11_default_visual_names_compare_sheet_without_home_path(self):
+        self.build(cfg(default="visual"))
+        self.assert_sheet_command(self.session_start())
+
+    def test_CX_11_switched_visual_feature_names_compare_sheet_without_home_path(self):
+        self.build(cfg(default="feature"))
+        self.switch("visual+feature")
+        self.assert_sheet_command(self.session_start(source="resume"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -384,5 +384,12 @@ class TestSwitchRolesSessionsLog(VisualBase):
         self.assertEqual(rows[0]["rule"], "V")
 
 
+    def test_VG_14_denial_reason_names_compare_sheet_without_home_path(self):
+        self.build()
+        reason = self.reason(self.edit("s1"))
+        self.assertIn("compare-sheet", reason)
+        self.assertNotIn("~/", reason)
+
+
 if __name__ == "__main__":
     unittest.main()
