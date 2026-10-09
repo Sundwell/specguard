@@ -1,5 +1,7 @@
 # specguard
 
+> **Archived on 2026-10-09.** The author no longer uses or maintains this plugin. In his own measurement over 18 days of daily use on one project, the chain of spec, advocate and blind tester took about a third of the agent time, the suite grew to about 2600 tests, and no existing test ever caught a regression. What paid off turned out to be simple enough to keep as plain instructions. Say in three lines what will be done before starting, write tests only where a silent failure costs money or data and only after the user agrees, and give rules about money one review pass for what is missing. The plugin still works as described below.
+
 A Claude Code plugin for role-separated TDD. A blind `specguard:tester` subagent writes tests from a spec without reading the implementation, the executor may not write tests itself while a gated mode is on, a spec needs the user's approval before a tester can run on it, a Stop hook gates the executor's exit on a green test run, and every session picks its own mode. specguard has no runtime dependency on any other plugin and reads its own config, `.claude/specguard.json`, per project.
 
 Install it with `/plugin install specguard --marketplace Sundwell/specguard` inside a Claude Code session, then ask Claude to set specguard up in your project. Section 8 has the requirements and the details.
